@@ -119,7 +119,9 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
-    with open(file_loc, "wb") as f: f.write(await file.read())
+    async with aiofiles.open(file_loc, "wb") as f:
+        while content := await file.read(1024 * 1024):
+            await f.write(content)
     
     try:
         msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
@@ -158,16 +160,22 @@ async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_sc
     return {"message": "Created"}
 
 @app.get("/api/content")
-async def get_content(folder_id: Optional[str] = "root", token: str = Depends(oauth2_scheme)):
+async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
     
-    # Root ဆိုရင် parent_id က None ဖြစ်ရမယ်
-    query_id = None if folder_id == "root" else folder_id
-    query = {"owner": user["username"], "parent_id": query_id}
-    
-    folders = [{"uid": f["uid"], "name": f["name"], "type": "folder"} 
-               async for f in folders_collection.find(query).sort("name", 1)]
+    query = {"owner": user["username"]}
+
+    if q:
+        query["filename"] = {"$regex": q, "$options": "i"} 
+    else:
+        query["parent_id"] = None if folder_id == "root" else folder_id
+
+    folders = []
+    if not q:
+        folder_query = {"owner": user["username"], "parent_id": query.get("parent_id")}
+        async for f in folders_collection.find(folder_query).sort("name", 1):
+            folders.append({"uid": f["uid"], "name": f["name"], "type": "folder"})
     
     files = []
     async for f in files_collection.find(query).sort("upload_date", -1):
@@ -179,7 +187,7 @@ async def get_content(folder_id: Optional[str] = "root", token: str = Depends(oa
             "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date']))
         })
     return {"folders": folders, "files": files}
-
+    
 @app.put("/api/rename")
 async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
