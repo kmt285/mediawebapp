@@ -3,302 +3,330 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DropSpace Drive</title>
+    <title>DropSpace Ultimate</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         body { background-color: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', sans-serif; }
         .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .item-card:hover { background: rgba(255,255,255,0.05); }
+        .item-card:hover { background: rgba(255,255,255,0.08); }
+        .folder-icon { color: #facc15; }
+        .file-icon { color: #60a5fa; }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden">
 
     <nav class="glass p-4 flex justify-between items-center border-b border-gray-700 z-10">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
             <i class="fas fa-cloud text-blue-500 text-2xl"></i>
             <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">DropSpace</h1>
         </div>
-        <div id="auth-buttons">
-            <button onclick="toggleModal('login-modal')" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 transition text-sm">Login</button>
-            <button onclick="toggleModal('register-modal')" class="px-4 py-2 border border-blue-600 rounded hover:bg-blue-900 transition text-sm ml-2">Register</button>
+        
+        <div id="auth-guest" class="flex gap-2">
+            <button onclick="toggleModal('login-modal')" class="px-4 py-2 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700 text-sm">Login</button>
+            <button onclick="toggleModal('register-modal')" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm">Sign Up</button>
         </div>
-        <div id="user-info" class="hidden flex items-center gap-4">
-            <span id="username-display" class="text-gray-300 font-medium"></span>
-            <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm"><i class="fas fa-sign-out-alt"></i></button>
+        
+        <div id="auth-user" class="hidden flex items-center gap-4">
+            <span id="username-display" class="text-blue-300 font-medium"></span>
+            <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
         </div>
     </nav>
 
-    <div class="flex flex-1 overflow-hidden">
-        
-        <aside class="w-64 bg-gray-900 border-r border-gray-800 hidden md:flex flex-col p-4 gap-2">
-            <button onclick="renderContent('root')" class="flex items-center gap-3 px-4 py-3 rounded bg-blue-600/20 text-blue-400">
-                <i class="fas fa-hdd"></i> My Drive
-            </button>
-        </aside>
+    <div class="flex-1 overflow-hidden relative">
 
-        <main class="flex-1 flex flex-col relative">
-            
-            <div id="toolbar" class="hidden p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/50">
-                <div class="flex items-center gap-2 text-sm text-gray-400" id="breadcrumbs">
-                    <span onclick="navigateTo('root')" class="cursor-pointer hover:text-white"><i class="fas fa-home"></i> Home</span>
+        <div id="view-guest" class="h-full flex flex-col items-center justify-center p-4">
+            <div class="glass p-10 rounded-2xl max-w-lg w-full text-center shadow-2xl">
+                <h2 class="text-3xl font-bold mb-2">Upload & Share</h2>
+                <p class="text-gray-400 mb-8">No login required. Original quality.</p>
+                
+                <div id="guest-dropzone" class="border-2 border-dashed border-gray-600 rounded-xl p-12 cursor-pointer hover:border-blue-500 hover:bg-gray-800/50 transition" onclick="document.getElementById('guest-file').click()">
+                    <i class="fas fa-cloud-upload-alt text-6xl text-blue-500 mb-4"></i>
+                    <p class="text-lg">Click to Upload</p>
+                    <input type="file" id="guest-file" class="hidden" onchange="guestUpload(this.files[0])">
                 </div>
 
+                <div id="guest-progress" class="hidden mt-6">
+                    <div class="w-full bg-gray-700 rounded-full h-2 mb-2">
+                        <div id="guest-bar" class="bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <p class="text-sm text-blue-400 animate-pulse">Uploading...</p>
+                </div>
+
+                <div id="guest-result" class="hidden mt-6 bg-gray-800 p-4 rounded-lg border border-gray-600">
+                    <p class="text-green-400 text-sm mb-2"><i class="fas fa-check-circle"></i> Upload Complete</p>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="guest-link" readonly class="bg-transparent w-full text-sm outline-none text-white font-mono">
+                        <button onclick="copyToClip('guest-link')" class="text-blue-400 hover:text-white"><i class="fas fa-copy"></i></button>
+                    </div>
+                    <button onclick="resetGuest()" class="mt-4 text-xs text-gray-500 hover:text-gray-300">Upload Another</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-drive" class="hidden h-full flex flex-col">
+            
+            <div class="bg-gray-900/80 border-b border-gray-700 p-3 flex justify-between items-center">
+                <div class="flex items-center gap-2 text-sm ml-2" id="breadcrumbs">
+                    </div>
                 <div class="flex gap-2">
-                    <button onclick="createFolderPrompt()" class="px-3 py-1.5 bg-gray-800 rounded hover:bg-gray-700 border border-gray-700 text-sm">
-                        <i class="fas fa-folder-plus text-yellow-400"></i> New Folder
+                    <button onclick="createFolder()" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 px-3 py-1.5 rounded text-sm flex items-center gap-2">
+                        <i class="fas fa-folder-plus text-yellow-500"></i> New Folder
                     </button>
-                    <label class="px-3 py-1.5 bg-blue-600 rounded hover:bg-blue-700 text-sm cursor-pointer flex items-center gap-2">
-                        <i class="fas fa-upload"></i> Upload
-                        <input type="file" id="fileUpload" class="hidden" onchange="uploadFile(this.files[0])">
+                    <label class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm cursor-pointer flex items-center gap-2">
+                        <i class="fas fa-cloud-upload-alt"></i> Upload
+                        <input type="file" id="drive-file" class="hidden" onchange="driveUpload(this.files[0])">
                     </label>
                 </div>
             </div>
 
-            <div id="upload-progress" class="hidden absolute top-16 left-0 w-full h-1 bg-gray-800">
-                <div id="progress-bar" class="h-full bg-blue-500 transition-all duration-300" style="width: 0%"></div>
+            <div id="drive-progress" class="hidden w-full h-1 bg-gray-800">
+                <div id="drive-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 0%"></div>
             </div>
 
-            <div id="content-area" class="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 content-start">
-                <div class="col-span-full text-center text-gray-500 mt-20">
-                    <p class="text-lg">Please Login to access your Drive</p>
+            <div id="drive-grid" class="flex-1 overflow-y-auto p-5 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 content-start">
                 </div>
-            </div>
+        </div>
 
-        </main>
     </div>
 
     <div id="login-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
-        <div class="glass p-8 rounded-xl w-96">
-            <h2 class="text-2xl font-bold mb-6">Login</h2>
-            <input id="l-user" type="text" placeholder="Username" class="w-full bg-gray-800 p-3 rounded mb-3 outline-none border border-gray-700 focus:border-blue-500">
-            <input id="l-pass" type="password" placeholder="Password" class="w-full bg-gray-800 p-3 rounded mb-6 outline-none border border-gray-700 focus:border-blue-500">
-            <button onclick="login()" class="w-full bg-blue-600 py-3 rounded font-bold hover:bg-blue-700">Access Drive</button>
-            <button onclick="toggleModal('login-modal')" class="w-full mt-4 text-gray-400 text-sm hover:text-white">Cancel</button>
+        <div class="glass p-8 rounded-xl w-80">
+            <h2 class="text-xl font-bold mb-4">Login</h2>
+            <input id="l-user" type="text" placeholder="Username" class="w-full bg-gray-800 p-2 rounded mb-2 border border-gray-600">
+            <input id="l-pass" type="password" placeholder="Password" class="w-full bg-gray-800 p-2 rounded mb-4 border border-gray-600">
+            <button onclick="doLogin()" class="w-full bg-blue-600 py-2 rounded hover:bg-blue-700">Login</button>
+            <button onclick="toggleModal('login-modal')" class="w-full mt-2 text-sm text-gray-400">Cancel</button>
         </div>
     </div>
 
     <div id="register-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
-        <div class="glass p-8 rounded-xl w-96">
-            <h2 class="text-2xl font-bold mb-6 text-green-400">Create Account</h2>
-            <input id="r-user" type="text" placeholder="Username" class="w-full bg-gray-800 p-3 rounded mb-3 outline-none border border-gray-700">
-            <input id="r-pass" type="password" placeholder="Password" class="w-full bg-gray-800 p-3 rounded mb-6 outline-none border border-gray-700">
-            <button onclick="register()" class="w-full bg-green-600 py-3 rounded font-bold hover:bg-green-700">Sign Up</button>
-            <button onclick="toggleModal('register-modal')" class="w-full mt-4 text-gray-400 text-sm hover:text-white">Cancel</button>
+        <div class="glass p-8 rounded-xl w-80">
+            <h2 class="text-xl font-bold mb-4 text-green-400">Register</h2>
+            <input id="r-user" type="text" placeholder="Username" class="w-full bg-gray-800 p-2 rounded mb-2 border border-gray-600">
+            <input id="r-pass" type="password" placeholder="Password" class="w-full bg-gray-800 p-2 rounded mb-4 border border-gray-600">
+            <button onclick="doRegister()" class="w-full bg-green-600 py-2 rounded hover:bg-green-700">Sign Up</button>
+            <button onclick="toggleModal('register-modal')" class="w-full mt-2 text-sm text-gray-400">Cancel</button>
         </div>
     </div>
 
     <script>
+        // State
         let currentFolder = 'root';
         let folderHistory = [{id: 'root', name: 'Home'}];
-
-        // --- Auth Logic ---
-        function checkAuth() {
+        
+        function init() {
             const token = localStorage.getItem('token');
-            const user = localStorage.getItem('username');
             if(token) {
-                document.getElementById('auth-buttons').classList.add('hidden');
-                document.getElementById('user-info').classList.remove('hidden');
-                document.getElementById('username-display').innerText = user;
-                document.getElementById('toolbar').classList.remove('hidden');
-                loadContent();
+                // Show Drive View
+                document.getElementById('auth-guest').classList.add('hidden');
+                document.getElementById('auth-user').classList.remove('hidden');
+                document.getElementById('username-display').innerText = localStorage.getItem('username');
+                
+                document.getElementById('view-guest').classList.add('hidden');
+                document.getElementById('view-drive').classList.remove('hidden');
+                
+                loadDriveContent();
             } else {
-                document.getElementById('content-area').innerHTML = `
-                    <div class="col-span-full flex flex-col items-center justify-center h-full text-gray-500">
-                        <i class="fas fa-cloud-upload-alt text-6xl mb-4 opacity-50"></i>
-                        <p class="text-xl">Secure Unlimited Cloud Storage</p>
-                        <button onclick="toggleModal('login-modal')" class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700">Get Started</button>
-                    </div>`;
+                // Show Guest View
+                document.getElementById('auth-guest').classList.remove('hidden');
+                document.getElementById('auth-user').classList.add('hidden');
+                
+                document.getElementById('view-guest').classList.remove('hidden');
+                document.getElementById('view-drive').classList.add('hidden');
             }
         }
 
-        async function login() {
-            const user = document.getElementById('l-user').value;
-            const pass = document.getElementById('l-pass').value;
-            const params = new URLSearchParams(); params.append('username', user); params.append('password', pass);
+        // --- GUEST LOGIC ---
+        function guestUpload(file) {
+            if(!file) return;
+            document.getElementById('guest-dropzone').classList.add('hidden');
+            document.getElementById('guest-progress').classList.remove('hidden');
             
-            try {
-                const res = await fetch('/token', { method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: params });
-                const data = await res.json();
-                if(res.ok) {
-                    localStorage.setItem('token', data.access_token);
-                    localStorage.setItem('username', data.username);
-                    toggleModal('login-modal');
-                    checkAuth();
-                } else alert('Login Failed');
-            } catch(e) { alert('Error connecting'); }
+            const fd = new FormData();
+            fd.append('file', file);
+            
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/upload', true);
+            
+            xhr.upload.onprogress = (e) => {
+                const p = (e.loaded/e.total)*100;
+                document.getElementById('guest-bar').style.width = p + "%";
+            };
+            
+            xhr.onload = () => {
+                const res = JSON.parse(xhr.responseText);
+                document.getElementById('guest-progress').classList.add('hidden');
+                
+                if(xhr.status === 200) {
+                    document.getElementById('guest-result').classList.remove('hidden');
+                    document.getElementById('guest-link').value = window.location.origin + res.download_url;
+                } else {
+                    alert('Upload Failed: ' + (res.error || 'Error'));
+                    resetGuest();
+                }
+            };
+            xhr.send(fd);
         }
 
-        async function register() {
-            const user = document.getElementById('r-user').value;
-            const pass = document.getElementById('r-pass').value;
-            const params = new URLSearchParams(); params.append('username', user); params.append('password', pass);
-            
-            const res = await fetch('/register', { method: 'POST', body: params });
-            if(res.ok) { alert('Account created! Please Login.'); toggleModal('register-modal'); toggleModal('login-modal'); }
-            else alert('Username taken');
+        function resetGuest() {
+            document.getElementById('guest-file').value = '';
+            document.getElementById('guest-result').classList.add('hidden');
+            document.getElementById('guest-dropzone').classList.remove('hidden');
         }
 
-        function logout() { localStorage.clear(); location.reload(); }
-        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
-
-        // --- Drive Logic ---
-
-        async function loadContent() {
+        // --- DRIVE LOGIC ---
+        async function loadDriveContent() {
+            const grid = document.getElementById('drive-grid');
+            grid.innerHTML = '<p class="text-gray-500 col-span-full text-center mt-10">Loading...</p>';
+            
             const token = localStorage.getItem('token');
-            const area = document.getElementById('content-area');
-            area.innerHTML = '<div class="col-span-full text-center pt-20 text-gray-500"><i class="fas fa-spinner fa-spin text-2xl"></i></div>';
-            
             try {
-                const res = await fetch(`/api/content?folder_id=${currentFolder}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const res = await fetch(`/api/content?folder_id=${currentFolder}`, {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                
+                if(res.status === 401) { logout(); return; }
                 const data = await res.json();
                 
-                area.innerHTML = '';
+                grid.innerHTML = '';
                 if(data.folders.length === 0 && data.files.length === 0) {
-                    area.innerHTML = '<div class="col-span-full text-center pt-20 text-gray-500">Folder is empty</div>';
-                    return;
+                    grid.innerHTML = '<p class="text-gray-600 col-span-full text-center mt-10">Empty Folder</p>';
                 }
 
                 // Render Folders
                 data.folders.forEach(f => {
-                    area.innerHTML += `
-                        <div ondblclick="navigateTo('${f.uid}', '${f.name}')" class="item-card p-4 rounded-xl bg-gray-800/50 border border-gray-700 cursor-pointer group relative select-none">
-                            <div class="flex items-center gap-3 mb-2">
-                                <i class="fas fa-folder text-yellow-400 text-3xl"></i>
-                                <span class="font-medium truncate w-full">${f.name}</span>
+                    grid.innerHTML += `
+                        <div ondblclick="enterFolder('${f.uid}', '${f.name}')" class="item-card bg-gray-800 rounded-lg p-3 border border-gray-700 cursor-pointer group relative">
+                            <div class="text-center mb-2">
+                                <i class="fas fa-folder folder-icon text-4xl"></i>
                             </div>
-                            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-2">
-                                <button onclick="renameItem('${f.uid}', 'folder')" class="text-gray-400 hover:text-white p-1"><i class="fas fa-pen"></i></button>
-                                <button onclick="deleteItem('${f.uid}', 'folder')" class="text-red-400 hover:text-red-300 p-1"><i class="fas fa-trash"></i></button>
+                            <p class="text-sm text-center truncate select-none">${f.name}</p>
+                            <div class="absolute top-1 right-1 hidden group-hover:flex gap-1 bg-gray-900 rounded p-1">
+                                <i onclick="deleteItem('${f.uid}', 'folder')" class="fas fa-trash text-red-400 text-xs hover:text-white p-1"></i>
                             </div>
                         </div>`;
                 });
 
                 // Render Files
                 data.files.forEach(f => {
-                    area.innerHTML += `
-                        <div class="item-card p-4 rounded-xl bg-gray-800/50 border border-gray-700 group relative">
-                            <div class="flex flex-col gap-2">
-                                <div class="flex items-center justify-between">
-                                    <i class="fas fa-file-alt text-blue-400 text-3xl"></i>
-                                    <span class="text-xs text-gray-500">${f.size}</span>
-                                </div>
-                                <span class="font-medium truncate text-sm" title="${f.name}">${f.name}</span>
-                                <span class="text-xs text-gray-600">${f.date}</span>
+                    grid.innerHTML += `
+                        <div class="item-card bg-gray-800 rounded-lg p-3 border border-gray-700 group relative">
+                            <div class="text-center mb-2">
+                                <i class="fas fa-file-alt file-icon text-4xl"></i>
                             </div>
-                            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1 bg-gray-900 rounded p-1 shadow">
-                                <a href="/dl/${f.uid}" target="_blank" class="text-green-400 hover:text-white p-1"><i class="fas fa-download"></i></a>
-                                <button onclick="copyLink('${f.uid}')" class="text-blue-400 hover:text-white p-1"><i class="fas fa-link"></i></button>
-                                <button onclick="renameItem('${f.uid}', 'file')" class="text-gray-400 hover:text-white p-1"><i class="fas fa-pen"></i></button>
-                                <button onclick="deleteItem('${f.uid}', 'file')" class="text-red-400 hover:text-red-300 p-1"><i class="fas fa-trash"></i></button>
+                            <p class="text-sm text-center truncate select-none" title="${f.name}">${f.name}</p>
+                            <p class="text-xs text-center text-gray-500">${f.size}</p>
+                            <div class="absolute top-1 right-1 hidden group-hover:flex gap-1 bg-gray-900 rounded p-1">
+                                <a href="/dl/${f.uid}" target="_blank"><i class="fas fa-download text-green-400 text-xs hover:text-white p-1"></i></a>
+                                <i onclick="deleteItem('${f.uid}', 'file')" class="fas fa-trash text-red-400 text-xs hover:text-white p-1"></i>
                             </div>
                         </div>`;
                 });
-
+                
                 updateBreadcrumbs();
+
             } catch(e) { console.error(e); }
         }
 
-        // --- Actions ---
-
-        async function createFolderPrompt() {
-            const name = prompt("Enter folder name:");
+        async function createFolder() {
+            const name = prompt("Folder Name:");
             if(!name) return;
-            
             const token = localStorage.getItem('token');
+            
             await fetch('/api/folder', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ name: name, parent_id: currentFolder })
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                body: JSON.stringify({name: name, parent_id: currentFolder})
             });
-            loadContent();
+            loadDriveContent();
         }
 
-        async function uploadFile(file) {
+        async function driveUpload(file) {
             if(!file) return;
-            const bar = document.getElementById('progress-bar');
-            document.getElementById('upload-progress').classList.remove('hidden');
+            document.getElementById('drive-progress').classList.remove('hidden');
+            const bar = document.getElementById('drive-bar');
             
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('token', localStorage.getItem('token')); // Send token manually for simplicity
-            formData.append('parent_id', currentFolder);
-
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('token', localStorage.getItem('token'));
+            fd.append('parent_id', currentFolder);
+            
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload', true);
-            
-            xhr.upload.onprogress = (e) => {
-                if(e.lengthComputable) bar.style.width = ((e.loaded/e.total)*100) + '%';
-            };
-            
+            xhr.upload.onprogress = (e) => { bar.style.width = ((e.loaded/e.total)*100) + "%"; };
             xhr.onload = () => {
-                document.getElementById('upload-progress').classList.add('hidden');
-                bar.style.width = '0%';
-                if(xhr.status === 200) loadContent();
-                else alert('Upload failed');
+                document.getElementById('drive-progress').classList.add('hidden');
+                bar.style.width = "0%";
+                loadDriveContent();
             };
-            
-            xhr.send(formData);
-        }
-
-        async function renameItem(uid, type) {
-            const newName = prompt("Rename to:");
-            if(!newName) return;
-            const token = localStorage.getItem('token');
-            
-            await fetch('/api/rename', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ uid: uid, new_name: newName, type: type })
-            });
-            loadContent();
+            xhr.send(fd);
         }
 
         async function deleteItem(uid, type) {
-            if(!confirm("Are you sure?")) return;
+            if(!confirm("Delete?")) return;
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/delete/${uid}?type=${type}`, { 
+            await fetch(`/api/delete/${uid}?type=${type}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {'Authorization': `Bearer ${token}`}
             });
-            const data = await res.json();
-            if(!res.ok) alert(data.error || "Failed");
-            loadContent();
+            loadDriveContent();
         }
 
-        function copyLink(uid) {
-            navigator.clipboard.writeText(window.location.origin + '/dl/' + uid);
-            alert("Link copied!");
-        }
-
-        // --- Navigation ---
-        function navigateTo(uid, name) {
-            if(uid === 'root') {
-                currentFolder = 'root';
-                folderHistory = [{id: 'root', name: 'Home'}];
-            } else {
-                currentFolder = uid;
-                folderHistory.push({id: uid, name: name});
-            }
-            loadContent();
+        // --- NAVIGATION ---
+        function enterFolder(uid, name) {
+            currentFolder = uid;
+            folderHistory.push({id: uid, name: name});
+            loadDriveContent();
         }
 
         function updateBreadcrumbs() {
-            const el = document.getElementById('breadcrumbs');
-            el.innerHTML = folderHistory.map((f, i) => {
-                if(i === folderHistory.length -1) return `<span class="text-white font-bold">${f.name}</span>`;
-                return `<span onclick="goBackTo(${i})" class="cursor-pointer hover:text-blue-400">${f.name}</span> <span class="text-gray-600">/</span>`;
-            }).join(' ');
+            const bc = document.getElementById('breadcrumbs');
+            bc.innerHTML = folderHistory.map((f, i) => {
+                if(i === folderHistory.length - 1) return `<span class="text-white font-bold">${f.name}</span>`;
+                return `<span onclick="goToHistory(${i})" class="text-gray-400 hover:text-blue-400 cursor-pointer">${f.name}</span> <span class="text-gray-600">/</span>`;
+            }).join('');
         }
 
-        function goBackTo(index) {
-            folderHistory = folderHistory.slice(0, index + 1);
-            currentFolder = folderHistory[folderHistory.length - 1].id;
-            loadContent();
+        function goToHistory(idx) {
+            folderHistory = folderHistory.slice(0, idx+1);
+            currentFolder = folderHistory[idx].id;
+            loadDriveContent();
         }
 
-        // Init
-        checkAuth();
+        // --- AUTH ---
+        async function doLogin() {
+            const u = document.getElementById('l-user').value;
+            const p = document.getElementById('l-pass').value;
+            const params = new URLSearchParams(); params.append('username', u); params.append('password', p);
+            
+            try {
+                const res = await fetch('/token', {method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: params});
+                if(res.ok) {
+                    const data = await res.json();
+                    localStorage.setItem('token', data.access_token);
+                    localStorage.setItem('username', data.username);
+                    toggleModal('login-modal');
+                    init();
+                } else alert('Login Failed');
+            } catch(e) { alert('Error'); }
+        }
+
+        async function doRegister() {
+            const u = document.getElementById('r-user').value;
+            const p = document.getElementById('r-pass').value;
+            const params = new URLSearchParams(); params.append('username', u); params.append('password', p);
+            const res = await fetch('/register', {method: 'POST', body: params});
+            if(res.ok) { alert('Success'); toggleModal('register-modal'); }
+            else alert('Failed');
+        }
+
+        function logout() { localStorage.clear(); location.reload(); }
+        function copyToClip(id) { document.getElementById(id).select(); document.execCommand('copy'); alert('Copied'); }
+        function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+
+        // Start
+        init();
     </script>
 </body>
 </html>
