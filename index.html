@@ -64,22 +64,31 @@
             </div>
         </div>
 
-        <div id="view-drive" class="hidden h-full flex flex-col">
+        <div id="view-drive" class="hidden h-full flex flex-col bg-gray-900">
             
-            <div class="bg-gray-900/80 border-b border-gray-700 p-3 flex justify-between items-center">
-                <div class="flex items-center gap-2 text-sm ml-2" id="breadcrumbs">
-                    </div>
-                <div class="flex gap-2">
-                    <button onclick="createFolder()" class="bg-gray-800 hover:bg-gray-700 border border-gray-600 px-3 py-1.5 rounded text-sm flex items-center gap-2">
-                        <i class="fas fa-folder-plus text-yellow-500"></i> New Folder
+            <div class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-20">
+                <div class="flex items-center gap-2 text-sm text-gray-300 overflow-x-auto whitespace-nowrap" id="breadcrumbs">
+                    <span class="font-bold">Home</span>
+                </div>
+
+                <div class="flex gap-3 shrink-0">
+                    <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
+                        <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
                     </button>
-                    <label class="bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm cursor-pointer flex items-center gap-2">
-                        <i class="fas fa-cloud-upload-alt"></i> Upload
+                    <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
+                        <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
                         <input type="file" id="drive-file" class="hidden" onchange="driveUpload(this.files[0])">
                     </label>
                 </div>
             </div>
 
+            <div id="drive-progress" class="hidden w-full h-1 bg-gray-700">
+                <div id="drive-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 0%"></div>
+            </div>
+
+            <div id="drive-grid" class="flex-1 overflow-y-auto p-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 content-start pb-20">
+                </div>
+        </div>
             <div id="drive-progress" class="hidden w-full h-1 bg-gray-800">
                 <div id="drive-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 0%"></div>
             </div>
@@ -178,55 +187,81 @@
         // --- DRIVE LOGIC ---
         async function loadDriveContent() {
             const grid = document.getElementById('drive-grid');
-            grid.innerHTML = '<p class="text-gray-500 col-span-full text-center mt-10">Loading...</p>';
-            
             const token = localStorage.getItem('token');
+            
+            // Loading ပြမယ်
+            grid.innerHTML = '<div class="col-span-full flex justify-center mt-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i></div>';
+            
             try {
+                // API ခေါ်မယ်
+                console.log("Fetching content for folder:", currentFolder);
                 const res = await fetch(`/api/content?folder_id=${currentFolder}`, {
                     headers: {'Authorization': `Bearer ${token}`}
                 });
                 
-                if(res.status === 401) { logout(); return; }
-                const data = await res.json();
-                
-                grid.innerHTML = '';
-                if(data.folders.length === 0 && data.files.length === 0) {
-                    grid.innerHTML = '<p class="text-gray-600 col-span-full text-center mt-10">Empty Folder</p>';
+                // Login မဝင်ရသေးရင် ထွက်မယ်
+                if(res.status === 401) { 
+                    console.log("Unauthorized, logging out...");
+                    logout(); 
+                    return; 
                 }
 
-                // Render Folders
+                const data = await res.json();
+                console.log("Data received:", data); // Data ရမရ စစ်မယ်
+
+                grid.innerHTML = ''; // အဟောင်းရှင်းမယ်
+
+                // ဘာမှမရှိရင် Empty ပြမယ်
+                if(!data.folders.length && !data.files.length) {
+                    grid.innerHTML = `
+                        <div class="col-span-full flex flex-col items-center justify-center mt-20 text-gray-500 opacity-50">
+                            <i class="fas fa-folder-open text-6xl mb-4"></i>
+                            <p>Empty Folder</p>
+                        </div>`;
+                    updateBreadcrumbs();
+                    return;
+                }
+
+                // 1. Folders အရင်ပြမယ်
                 data.folders.forEach(f => {
                     grid.innerHTML += `
-                        <div ondblclick="enterFolder('${f.uid}', '${f.name}')" class="item-card bg-gray-800 rounded-lg p-3 border border-gray-700 cursor-pointer group relative">
-                            <div class="text-center mb-2">
-                                <i class="fas fa-folder folder-icon text-4xl"></i>
-                            </div>
-                            <p class="text-sm text-center truncate select-none">${f.name}</p>
-                            <div class="absolute top-1 right-1 hidden group-hover:flex gap-1 bg-gray-900 rounded p-1">
-                                <i onclick="deleteItem('${f.uid}', 'folder')" class="fas fa-trash text-red-400 text-xs hover:text-white p-1"></i>
-                            </div>
+                        <div ondblclick="enterFolder('${f.uid}', '${f.name}')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32">
+                            <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
+                            <p class="text-sm text-center text-gray-200 truncate w-full px-2 select-none">${f.name}</p>
+                            
+                            <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="absolute top-2 right-2 hidden group-hover:block text-red-400 hover:text-white bg-gray-900 rounded-full w-6 h-6 flex items-center justify-center">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
                         </div>`;
                 });
 
-                // Render Files
+                // 2. Files ဆက်ပြမယ်
                 data.files.forEach(f => {
                     grid.innerHTML += `
-                        <div class="item-card bg-gray-800 rounded-lg p-3 border border-gray-700 group relative">
-                            <div class="text-center mb-2">
-                                <i class="fas fa-file-alt file-icon text-4xl"></i>
+                        <div class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
+                            <i class="fas fa-file-alt text-blue-400 text-3xl mb-1 drop-shadow-md"></i>
+                            <div class="w-full text-center">
+                                <p class="text-xs text-gray-200 truncate w-full select-none font-medium">${f.name}</p>
+                                <p class="text-[10px] text-gray-500 mt-1">${f.size}</p>
                             </div>
-                            <p class="text-sm text-center truncate select-none" title="${f.name}">${f.name}</p>
-                            <p class="text-xs text-center text-gray-500">${f.size}</p>
-                            <div class="absolute top-1 right-1 hidden group-hover:flex gap-1 bg-gray-900 rounded p-1">
-                                <a href="/dl/${f.uid}" target="_blank"><i class="fas fa-download text-green-400 text-xs hover:text-white p-1"></i></a>
-                                <i onclick="deleteItem('${f.uid}', 'file')" class="fas fa-trash text-red-400 text-xs hover:text-white p-1"></i>
+                            
+                            <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
+                                <a href="/dl/${f.uid}" target="_blank" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Download">
+                                    <i class="fas fa-download text-xs"></i>
+                                </a>
+                                <button onclick="deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Delete">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
                             </div>
                         </div>`;
                 });
                 
                 updateBreadcrumbs();
 
-            } catch(e) { console.error(e); }
+            } catch(e) { 
+                console.error("Error loading content:", e);
+                grid.innerHTML = '<p class="text-red-400 col-span-full text-center mt-10">Error loading files. Check Console.</p>';
+            }
         }
 
         async function createFolder() {
