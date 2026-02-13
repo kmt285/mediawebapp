@@ -205,22 +205,24 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
         msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
         if os.path.exists(file_loc): os.remove(file_loc)
 
+        # Thumbnail ရှိ/မရှိ စစ်ဆေးပြီး ရှိရင် ယူမယ်
+        thumb_id = None
+        if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
+            thumb_id = msg.document.thumbs[0].file_id
+
         file_data = {
             "uid": file_uid,
             "file_id": msg.document.file_id,
             "filename": file.filename,
             "size": msg.document.file_size,
             "upload_date": time.time(),
-            "owner": user["username"] if user else None, # Guest = None
-            "parent_id": parent_id if (user and parent_id != "root") else None
+            "owner": user["username"] if user else None,
+            "parent_id": parent_id if (user and parent_id != "root") else None,
+            "thumb_id": thumb_id # Thumbnail ID ကို Database မှာ သိမ်းမယ်
         }
         await files_collection.insert_one(file_data)
         
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
-
-    except Exception as e:
-        if os.path.exists(file_loc): os.remove(file_loc)
-        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # Drive API (User Only)
 @app.post("/api/folder")
@@ -262,7 +264,8 @@ async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None
             "name": f["filename"],
             "size": f"{round(f['size']/1024/1024, 2)} MB",
             "type": "file",
-            "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date']))
+            "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date'])),
+            "has_thumb": bool(f.get("thumb_id")) # Thumbnail ပါ/မပါ စစ်ပေးလိုက်မယ်
         })
     return {"folders": folders, "files": files}
     
@@ -318,6 +321,17 @@ async def view_file(uid: str):
         media_type=mime_type, 
         headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'}
     )
+
+@app.get("/thumb/{uid}")
+async def get_thumbnail(uid: str):
+    file_data = await files_collection.find_one({"uid": uid})
+    if not file_data or not file_data.get("thumb_id"):
+        raise HTTPException(status_code=404, detail="Thumbnail not found")
+    
+    async def streamer():
+        async for chunk in bot.stream_media(file_data["thumb_id"]): yield chunk
+            
+    return StreamingResponse(streamer(), media_type="image/jpeg")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
