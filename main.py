@@ -5,6 +5,8 @@ import uvicorn
 import aiofiles
 from typing import Optional, List
 from datetime import datetime, timedelta
+from authlib.integrations.starlette_client import OAuth
+from starlette.config import Config
 
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -30,6 +32,19 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 # --- Setup ---
 app = FastAPI()
 templates = Jinja2Templates(directory="templates" if os.path.exists("templates") else ".")
+
+# --- Google Auth Config ---
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
 
 # Database
 mongo_client = AsyncIOMotorClient(MONGO_URL)
@@ -109,6 +124,63 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if not user or not verify_password(form_data.password, user["password"]):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     return {"access_token": create_access_token({"sub": user["username"]}), "token_type": "bearer", "username": user["username"]}
+
+# --- Google Login Routes ---
+
+@app.get("/login/google")
+async def login_google(request: Request):
+    # Google Login Page ကို လှမ်းပို့လိုက်မယ်
+    redirect_uri = request.url_for('auth_google') # /auth/google ကို auto ယူသွားမယ်
+    return await oauth.google.authorize_redirect(request, redirect_uri)
+
+@app.get("/auth/google")
+async def auth_google(request: Request):
+    try:
+        # Google က ပြန်လာတဲ့ Data ကို ဖတ်မယ်
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get('userinfo')
+        
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Google Auth Failed")
+
+        email = user_info.get("email")
+        name = user_info.get("name") or email.split("@")[0]
+
+        # DB မှာ User ရှိမရှိ စစ်မယ်
+        user = await users_collection.find_one({"username": email})
+        
+        if not user:
+            # မရှိရင် အသစ်ဆောက်မယ် (Password မလိုဘူး Google နဲ့မို့လို့)
+            await users_collection.insert_one({
+                "username": email,
+                "auth_type": "google",
+                "created_at": time.time()
+            })
+        
+        # JWT Token ထုတ်ပေးမယ်
+        access_token = create_access_token({"sub": email})
+        
+        # Frontend ကို Token ပြန်ပို့ဖို့ HTML အသေးလေး render လုပ်မယ်
+        # ဒါက Professional Technique ပါ (Backend က Token ကို LocalStorage ထဲထည့်ပေးလိုက်တာ)
+        html_content = f"""
+        <html>
+            <head>
+                <title>Redirecting...</title>
+                <script>
+                    localStorage.setItem('token', '{access_token}');
+                    localStorage.setItem('username', '{email}');
+                    window.location.href = '/';
+                </script>
+            </head>
+            <body>
+                <p>Login successful! Redirecting...</p>
+            </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+
+    except Exception as e:
+        return HTMLResponse(content=f"<p style='color:red'>Auth Error: {str(e)}</p>")
 
 # Upload (Hybrid: Guest & User)
 @app.post("/upload")
