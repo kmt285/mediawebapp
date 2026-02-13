@@ -137,11 +137,18 @@
         async function login() {
             const user = document.getElementById('l-user').value;
             const pass = document.getElementById('l-pass').value;
-            const formData = new FormData();
-            formData.append('username', user);
-            formData.append('password', pass);
+            
+            // ပြင်ဆင်ချက်: FormData အစား URLSearchParams ကို သုံးပါမယ်
+            const formBody = new URLSearchParams();
+            formBody.append('username', user);
+            formBody.append('password', pass);
 
-            const res = await fetch('/token', { method: 'POST', body: formData });
+            const res = await fetch('/token', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, // Header ထည့်ပေးလိုက်တယ်
+                body: formBody 
+            });
+            
             const data = await res.json();
             
             if (res.ok) {
@@ -150,7 +157,8 @@
                 checkLogin();
                 showSection('home');
             } else {
-                alert('Login Failed');
+                // Error အတိအကျသိရအောင် alert ထုတ်ကြည့်မယ်
+                alert('Login Failed: ' + (data.detail || 'Unknown Error'));
             }
         }
 
