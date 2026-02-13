@@ -3,158 +3,251 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DropSpace - Secure File Share</title>
+    <title>DropSpace V2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body {
-            background: #0f172a;
-            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
-            color: white;
-            font-family: 'Segoe UI', sans-serif;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify_content: center;
-            overflow: hidden;
-        }
+        body { background: #0f172a; color: white; font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
         .glass-panel {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border-radius: 16px;
         }
-        .upload-zone {
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-            transition: all 0.3s ease;
-        }
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: #3b82f6;
-            background: rgba(59, 130, 246, 0.1);
-        }
-        .glow-btn {
-            background: linear-gradient(45deg, #3b82f6, #8b5cf6);
-            transition: transform 0.2s;
-        }
-        .glow-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-        }
+        .nav-item { cursor: pointer; padding: 8px 16px; border-radius: 8px; transition: all 0.3s; }
+        .nav-item:hover, .nav-item.active { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
     </style>
 </head>
-<body>
+<body class="flex flex-col items-center p-4">
 
-    <div class="container mx-auto px-4 max-w-lg">
-        <div class="glass-panel p-8 text-center">
-            <h1 class="text-4xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-                DropSpace
-            </h1>
-            <p class="text-gray-400 mb-8">Share files with original quality.</p>
+    <nav class="glass-panel w-full max-w-4xl p-4 mb-8 flex justify-between items-center">
+        <h1 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">DropSpace</h1>
+        <div class="flex gap-2">
+            <div onclick="showSection('home')" class="nav-item active" id="nav-home">Upload</div>
+            <div onclick="showSection('dashboard')" class="nav-item hidden" id="nav-dash">My Cloud</div>
+            <div onclick="showSection('auth')" class="nav-item" id="nav-auth">Login</div>
+            <div onclick="doLogout()" class="nav-item hidden text-red-400" id="nav-logout">Logout</div>
+        </div>
+    </nav>
 
-            <div id="dropZone" class="upload-zone rounded-xl p-10 cursor-pointer mb-6">
+    <div class="w-full max-w-2xl">
+        
+        <div id="section-home" class="glass-panel p-8 text-center animate-fade">
+            <h2 class="text-xl mb-6">Upload Files (Original Quality)</h2>
+            
+            <div id="dropZone" class="border-2 border-dashed border-gray-600 rounded-xl p-10 cursor-pointer hover:border-blue-500 transition">
                 <i class="fas fa-cloud-upload-alt text-5xl text-blue-400 mb-4"></i>
-                <p class="text-lg">Drag & Drop files here</p>
-                <p class="text-sm text-gray-500 mt-2">or click to browse</p>
+                <p>Drag & Drop or Click</p>
                 <input type="file" id="fileInput" class="hidden">
             </div>
 
-            <div id="progressArea" class="hidden text-left mb-6">
-                <div class="flex justify-between mb-1">
-                    <span class="text-sm font-medium text-blue-400">Uploading...</span>
-                    <span id="percentText" class="text-sm font-medium text-blue-400">0%</span>
+            <div id="progressArea" class="hidden mt-6 text-left">
+                <div class="flex justify-between mb-1 text-sm text-blue-400">
+                    <span>Uploading...</span><span id="percentText">0%</span>
                 </div>
-                <div class="w-full bg-gray-700 rounded-full h-2.5">
-                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                    <div id="progressBar" class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>
                 </div>
             </div>
 
-            <div id="resultArea" class="hidden">
-                <p class="text-green-400 mb-2"><i class="fas fa-check-circle"></i> Upload Complete!</p>
-                <div class="flex items-center gap-2 bg-gray-800 p-3 rounded-lg border border-gray-700">
-                    <input type="text" id="shareLink" readonly class="bg-transparent w-full text-sm text-gray-300 outline-none">
-                    <button onclick="copyLink()" class="text-blue-400 hover:text-white"><i class="fas fa-copy"></i></button>
+            <div id="resultArea" class="hidden mt-6">
+                <div class="bg-gray-800 p-3 rounded-lg flex items-center gap-2 border border-gray-600">
+                    <input type="text" id="shareLink" readonly class="bg-transparent w-full text-sm outline-none text-gray-300">
+                    <button onclick="copyLink()" class="text-blue-400"><i class="fas fa-copy"></i></button>
                 </div>
-                <button onclick="location.reload()" class="mt-6 text-sm text-gray-500 hover:text-white">Send another file</button>
+                <button onclick="location.reload()" class="mt-4 text-sm text-gray-500">New Upload</button>
             </div>
         </div>
+
+        <div id="section-auth" class="hidden glass-panel p-8 max-w-md mx-auto">
+            <div id="login-form">
+                <h2 class="text-xl font-bold mb-4">Login</h2>
+                <input type="text" id="l-user" placeholder="Username" class="w-full p-3 bg-gray-800 rounded mb-3 border border-gray-600">
+                <input type="password" id="l-pass" placeholder="Password" class="w-full p-3 bg-gray-800 rounded mb-4 border border-gray-600">
+                <button onclick="login()" class="w-full bg-blue-600 py-2 rounded hover:bg-blue-700">Login</button>
+                <p class="mt-4 text-sm text-gray-400 text-center">No account? <span onclick="toggleAuth('register')" class="text-blue-400 cursor-pointer">Register</span></p>
+            </div>
+
+            <div id="register-form" class="hidden">
+                <h2 class="text-xl font-bold mb-4">Create Account</h2>
+                <input type="text" id="r-user" placeholder="Username" class="w-full p-3 bg-gray-800 rounded mb-3 border border-gray-600">
+                <input type="password" id="r-pass" placeholder="Password" class="w-full p-3 bg-gray-800 rounded mb-4 border border-gray-600">
+                <button onclick="register()" class="w-full bg-green-600 py-2 rounded hover:bg-green-700">Register</button>
+                <p class="mt-4 text-sm text-gray-400 text-center">Has account? <span onclick="toggleAuth('login')" class="text-blue-400 cursor-pointer">Login</span></p>
+            </div>
+        </div>
+
+        <div id="section-dashboard" class="hidden glass-panel p-6">
+            <h2 class="text-xl font-bold mb-4">My Cloud Storage</h2>
+            <div id="fileList" class="space-y-3">
+                <p class="text-gray-500 text-center">Loading files...</p>
+            </div>
+        </div>
+
     </div>
 
     <script>
+        // --- Navigation Logic ---
+        function showSection(id) {
+            ['home', 'auth', 'dashboard'].forEach(s => document.getElementById('section-'+s).classList.add('hidden'));
+            ['nav-home', 'nav-auth', 'nav-dash'].forEach(n => document.getElementById(n).classList.remove('active'));
+            
+            document.getElementById('section-'+id).classList.remove('hidden');
+            if(id !== 'auth' && id !== 'dashboard') document.getElementById('nav-'+id).classList.add('active');
+            
+            if (id === 'dashboard') loadFiles();
+        }
+
+        function toggleAuth(type) {
+            document.getElementById('login-form').classList.toggle('hidden', type === 'register');
+            document.getElementById('register-form').classList.toggle('hidden', type === 'login');
+        }
+
+        // --- Auth State ---
+        function checkLogin() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('username');
+            if (token) {
+                document.getElementById('nav-auth').classList.add('hidden');
+                document.getElementById('nav-dash').classList.remove('hidden');
+                document.getElementById('nav-dash').innerText = user + "'s Cloud";
+                document.getElementById('nav-logout').classList.remove('hidden');
+            } else {
+                document.getElementById('nav-auth').classList.remove('hidden');
+                document.getElementById('nav-dash').classList.add('hidden');
+                document.getElementById('nav-logout').classList.add('hidden');
+            }
+        }
+        checkLogin();
+
+        // --- API Calls ---
+
+        async function register() {
+            const user = document.getElementById('r-user').value;
+            const pass = document.getElementById('r-pass').value;
+            const formData = new FormData();
+            formData.append('username', user);
+            formData.append('password', pass);
+
+            const res = await fetch('/register', { method: 'POST', body: formData });
+            if (res.ok) { alert('Success! Please Login.'); toggleAuth('login'); }
+            else { alert('Error: Username might exist'); }
+        }
+
+        async function login() {
+            const user = document.getElementById('l-user').value;
+            const pass = document.getElementById('l-pass').value;
+            const formData = new FormData();
+            formData.append('username', user);
+            formData.append('password', pass);
+
+            const res = await fetch('/token', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            if (res.ok) {
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('username', data.username);
+                checkLogin();
+                showSection('home');
+            } else {
+                alert('Login Failed');
+            }
+        }
+
+        function doLogout() {
+            localStorage.clear();
+            location.reload();
+        }
+
+        // --- Upload Logic ---
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
-        const progressArea = document.getElementById('progressArea');
-        const progressBar = document.getElementById('progressBar');
-        const percentText = document.getElementById('percentText');
-        const resultArea = document.getElementById('resultArea');
-        const shareLink = document.getElementById('shareLink');
-
-        // Drag & Drop Handling
+        
         dropZone.onclick = () => fileInput.click();
-        
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-        
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            handleFile(e.dataTransfer.files[0]);
-        });
-
         fileInput.onchange = (e) => handleFile(e.target.files[0]);
 
         function handleFile(file) {
             if (!file) return;
-
-            // Show Progress
-            dropZone.classList.add('hidden');
-            progressArea.classList.remove('hidden');
+            document.getElementById('dropZone').classList.add('hidden');
+            document.getElementById('progressArea').classList.remove('hidden');
 
             const formData = new FormData();
             formData.append("file", file);
+            
+            // If logged in, send token
+            const token = localStorage.getItem('token');
+            if (token) formData.append("token", token);
 
             const xhr = new XMLHttpRequest();
             xhr.open("POST", "/upload", true);
-
+            
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) {
-                    const percent = (e.loaded / e.total) * 100;
-                    progressBar.style.width = percent + "%";
-                    percentText.innerText = Math.round(percent) + "%";
+                    const p = (e.loaded / e.total) * 100;
+                    document.getElementById('progressBar').style.width = p + "%";
+                    document.getElementById('percentText').innerText = Math.round(p) + "%";
                 }
             };
 
             xhr.onload = () => {
+                const resp = JSON.parse(xhr.responseText);
                 if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    
-                    // Error Handling (ဒီအချက်က အရေးကြီးဆုံးပါ)
-                    if (response.error) {
-                        alert("Error: " + response.error); // Error ကို message box နဲ့ပြမယ်
-                        progressArea.classList.add('hidden');
-                        dropZone.classList.remove('hidden');
-                        return;
-                    }
-
-                    progressArea.classList.add('hidden');
-                    resultArea.classList.remove('hidden');
-                    shareLink.value = window.location.origin + response.download_url;
+                    document.getElementById('progressArea').classList.add('hidden');
+                    document.getElementById('resultArea').classList.remove('hidden');
+                    document.getElementById('shareLink').value = window.location.origin + resp.download_url;
                 } else {
-                    alert("Server Error!");
+                    alert('Error: ' + (resp.error || 'Upload failed'));
                     location.reload();
                 }
             };
-
             xhr.send(formData);
         }
 
+        // --- Dashboard Logic ---
+        async function loadFiles() {
+            const token = localStorage.getItem('token');
+            const list = document.getElementById('fileList');
+            list.innerHTML = '<p class="text-center text-gray-500">Loading...</p>';
+
+            const res = await fetch('/api/myfiles?token=' + token);
+            if (!res.ok) { doLogout(); return; }
+            
+            const files = await res.json();
+            if (files.length === 0) {
+                list.innerHTML = '<p class="text-center text-gray-500">No files uploaded yet.</p>';
+                return;
+            }
+
+            let html = '';
+            files.forEach(f => {
+                html += `
+                    <div class="bg-gray-800 p-4 rounded flex justify-between items-center border border-gray-700 hover:border-blue-500">
+                        <div>
+                            <p class="font-bold text-sm text-gray-200">${f.filename}</p>
+                            <p class="text-xs text-gray-500">${f.size} • ${f.date}</p>
+                        </div>
+                        <div class="flex gap-3">
+                            <a href="/dl/${f.uid}" target="_blank" class="text-blue-400 hover:text-white"><i class="fas fa-download"></i></a>
+                            <button onclick="deleteFile('${f.uid}')" class="text-red-400 hover:text-red-300"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        async function deleteFile(uid) {
+            if (!confirm('Delete this file?')) return;
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/delete/${uid}?token=${token}`, { method: 'DELETE' });
+            if (res.ok) loadFiles();
+        }
+
         function copyLink() {
-            shareLink.select();
+            const copyText = document.getElementById("shareLink");
+            copyText.select();
             document.execCommand("copy");
-            alert("Link Copied!");
+            alert("Copied!");
         }
     </script>
 </body>
