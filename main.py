@@ -7,6 +7,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
+from starlette.middleware.sessions import SessionMiddleware
 
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -31,6 +32,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 # --- Setup ---
 app = FastAPI()
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 templates = Jinja2Templates(directory="templates" if os.path.exists("templates") else ".")
 
 # --- Google Auth Config ---
