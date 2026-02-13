@@ -170,7 +170,50 @@
         </div>
     </div>
 
+    <div id="password-modal" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center z-[60] backdrop-blur-sm">
+        <div class="glass bg-gray-800 p-6 rounded-xl w-80 shadow-2xl transform scale-95 transition-all">
+            <h3 class="text-lg font-bold text-gray-100 mb-1"><i class="fas fa-lock text-yellow-500 mr-2"></i> File Password</h3>
+            <p class="text-gray-400 text-xs mb-4">Set a password to protect this file. Leave blank to remove protection.</p>
+            <input type="text" id="share-pwd-input" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white outline-none focus:border-yellow-500 mb-6" placeholder="Enter password...">
+            <div class="flex justify-end gap-2">
+                <button onclick="closePasswordModal()" class="px-4 py-2 text-gray-400 hover:text-white text-sm">Cancel</button>
+                <button id="pwd-save-btn" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-sm font-medium">Save Lock</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+
+        // --- Password Logic ---
+        function openPasswordModal(uid, hasPassword) {
+            document.getElementById('password-modal').classList.remove('hidden');
+            const input = document.getElementById('share-pwd-input');
+            input.value = ''; // အမြဲတမ်း အလွတ်ပြမယ်
+            input.placeholder = hasPassword ? "Enter NEW password or leave blank to remove..." : "Enter password...";
+            input.focus();
+
+            const saveBtn = document.getElementById('pwd-save-btn');
+            const newBtn = saveBtn.cloneNode(true);
+            saveBtn.parentNode.replaceChild(newBtn, saveBtn);
+
+            newBtn.onclick = async () => {
+                const token = localStorage.getItem('token');
+                const pwd = input.value.trim();
+                
+                // API ခေါ်မယ်
+                await fetch('/api/file/password', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                    body: JSON.stringify({uid: uid, password: pwd ? pwd : null})
+                });
+                
+                closePasswordModal();
+                showToast(pwd ? "File Locked with Password! 🔒" : "Password Removed! 🔓");
+                loadDriveContent(); // UI ကို Refresh လုပ်မယ်
+            };
+        }
+        function closePasswordModal() { document.getElementById('password-modal').classList.add('hidden'); }
+        
         // --- UI HELPERS (New Professional Look) ---
         function showToast(msg, type = 'success') {
             const toast = document.getElementById('toast-box');
@@ -367,12 +410,16 @@
                 });
 
                 // Files (Double Click ဖြင့် ဖွင့်ရန် ပြင်ဆင်ထားသည်)
-                // Files (Thumbnail ပါရင် ပုံပေါ်မယ်၊ မပါရင် Icon ပေါ်မယ်)
+                // Files (With Password Lock Button)
                 data.files.forEach(f => {
-                    // Thumbnail ရှိမရှိ စစ်ဆေးခြင်း
                     let displayIcon = f.has_thumb 
                         ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600">` 
                         : getFileIcon(f.name);
+
+                    // Password ရှိ/မရှိ ပေါ်မူတည်ပြီး သော့ခလုတ်ပုံစံ ပြောင်းမယ်
+                    let lockIcon = f.has_password 
+                        ? '<i class="fas fa-lock text-red-400 text-xs"></i>' 
+                        : '<i class="fas fa-unlock text-gray-400 text-xs"></i>';
 
                     grid.innerHTML += `
                         <div ondblclick="window.open('/view/${f.uid}', '_blank')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
@@ -385,10 +432,13 @@
                             </div>
                             
                             <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-                                <button onclick="event.stopPropagation(); copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
-                                <a href="/dl/${f.uid}" target="_blank" onclick="event.stopPropagation()" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-download text-xs"></i></a>
-                                <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
+                                <button onclick="event.stopPropagation(); openPasswordModal('${f.uid}', ${f.has_password})" class="bg-gray-900 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Set Password">${lockIcon}</button>
+                                <button onclick="event.stopPropagation(); copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
+                                <a href="/dl/${f.uid}" target="_blank" onclick="event.stopPropagation()" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80"><i class="fas fa-download text-xs"></i></a>
+                                <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80"><i class="fas fa-trash text-xs"></i></button>
                             </div>
+                            
+                            ${f.has_password ? '<div class="absolute top-2 left-2 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
                         </div>`;
                 });
                 
