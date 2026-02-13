@@ -8,10 +8,9 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
-from pyrogram import Client, errors
+from pyrogram import Client
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -23,7 +22,7 @@ API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID_STR = os.environ.get("CHANNEL_ID") 
 MONGO_URL = os.environ.get("MONGO_URL")
-SECRET_KEY = os.environ.get("SECRET_KEY", "supersecretkey12345")
+SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
@@ -35,7 +34,7 @@ templates = Jinja2Templates(directory="templates" if os.path.exists("templates")
 mongo_client = AsyncIOMotorClient(MONGO_URL)
 db = mongo_client["fileshare_db"]
 files_collection = db["files"]
-folders_collection = db["folders"] # New Collection for Folders
+folders_collection = db["folders"]
 users_collection = db["users"]
 
 # Auth
@@ -49,15 +48,15 @@ bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKE
 class RenameRequest(BaseModel):
     uid: str
     new_name: str
-    type: str  # 'file' or 'folder'
+    type: str
 
 class CreateFolderRequest(BaseModel):
     name: str
     parent_id: Optional[str] = None
 
-# --- Helper Functions ---
-def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
+# --- Helpers ---
 def get_password_hash(password): return pwd_context.hash(password)
+def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -71,17 +70,18 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if username is None: return None
+        return await users_collection.find_one({"username": username})
     except JWTError: return None
-    return await users_collection.find_one({"username": username})
 
-# --- Events ---
+# --- Startup ---
 @app.on_event("startup")
 async def startup():
     await bot.start()
     try:
-        chat_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
-        await bot.get_chat(chat_id)
-        print("✅ Telegram Connected")
+        # Resolve Channel ID
+        cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
+        await bot.get_chat(cid)
+        print("✅ Connected to Telegram Channel")
     except Exception as e:
         print(f"❌ Telegram Error: {e}")
 
@@ -94,11 +94,11 @@ async def shutdown(): await bot.stop()
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-# Auth Routes
+# Auth
 @app.post("/register")
 async def register(username: str = Form(...), password: str = Form(...)):
     if await users_collection.find_one({"username": username}):
-        return JSONResponse(status_code=400, content={"error": "Username taken"})
+        return JSONResponse(status_code=400, content={"error": "Username already taken"})
     await users_collection.insert_one({"username": username, "password": get_password_hash(password)})
     return {"message": "Success"}
 
@@ -106,27 +106,21 @@ async def register(username: str = Form(...), password: str = Form(...)):
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await users_collection.find_one({"username": form_data.username})
     if not user or not verify_password(form_data.password, user["password"]):
-        raise HTTPException(status_code=400, detail="Incorrect credentials")
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
     return {"access_token": create_access_token({"sub": user["username"]}), "token_type": "bearer", "username": user["username"]}
 
-# --- File/Folder Logic ---
-
+# Upload (Hybrid: Guest & User)
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
     user = await get_current_user(token)
-    user_name = user["username"] if user else None
     
-    # Check if parent folder belongs to user
-    if parent_id and parent_id != "root" and user:
-        parent = await folders_collection.find_one({"uid": parent_id, "owner": user_name})
-        if not parent: parent_id = None # Reset to root if invalid
-
+    # Telegram Upload
     target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
     with open(file_loc, "wb") as f: f.write(await file.read())
-        
+    
     try:
         msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
         if os.path.exists(file_loc): os.remove(file_loc)
@@ -137,76 +131,71 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
             "filename": file.filename,
             "size": msg.document.file_size,
             "upload_date": time.time(),
-            "owner": user_name,
-            "parent_id": parent_id if parent_id != "root" else None
+            "owner": user["username"] if user else None, # Guest = None
+            "parent_id": parent_id if (user and parent_id != "root") else None
         }
         await files_collection.insert_one(file_data)
-        return {"status": "success", "download_url": f"/dl/{file_uid}"}
+        
+        return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
+
     except Exception as e:
         if os.path.exists(file_loc): os.remove(file_loc)
         return JSONResponse(status_code=500, content={"error": str(e)})
 
+# Drive API (User Only)
 @app.post("/api/folder")
 async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401, detail="Unauthorized")
+    if not user: raise HTTPException(status_code=401)
     
-    folder_data = {
+    await folders_collection.insert_one({
         "uid": str(uuid.uuid4())[:8],
         "name": req.name,
         "owner": user["username"],
         "parent_id": req.parent_id if req.parent_id != "root" else None,
         "created_at": time.time()
-    }
-    await folders_collection.insert_one(folder_data)
-    return {"message": "Folder created"}
+    })
+    return {"message": "Created"}
 
 @app.get("/api/content")
-async def get_content(token: str, folder_id: Optional[str] = None):
+async def get_content(token: str, folder_id: Optional[str] = "root"):
     user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401, detail="Unauthorized")
+    if not user: raise HTTPException(status_code=401)
     
     query = {"owner": user["username"], "parent_id": folder_id if folder_id != "root" else None}
     
-    # Get Folders
-    folders_cursor = folders_collection.find(query).sort("name", 1)
-    folders = [{"uid": f["uid"], "name": f["name"], "type": "folder"} async for f in folders_cursor]
+    folders = [{"uid": f["uid"], "name": f["name"], "type": "folder"} 
+               async for f in folders_collection.find(query).sort("name", 1)]
     
-    # Get Files
-    files_cursor = files_collection.find(query).sort("upload_date", -1)
     files = []
-    async for f in files_cursor:
+    async for f in files_collection.find(query).sort("upload_date", -1):
         files.append({
-            "uid": f["uid"], 
-            "name": f["filename"], 
+            "uid": f["uid"],
+            "name": f["filename"],
             "size": f"{round(f['size']/1024/1024, 2)} MB",
             "type": "file",
             "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date']))
         })
-        
     return {"folders": folders, "files": files}
 
 @app.put("/api/rename")
 async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401, detail="Unauthorized")
-    
+    if not user: raise HTTPException(status_code=401)
     col = folders_collection if req.type == "folder" else files_collection
     field = "name" if req.type == "folder" else "filename"
-    
     await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {field: req.new_name}})
     return {"message": "Renamed"}
 
 @app.delete("/api/delete/{uid}")
 async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401, detail="Unauthorized")
-    
+    if not user: raise HTTPException(status_code=401)
     if type == "folder":
-        # Check if folder is empty (Simple logic for now)
-        if await files_collection.count_documents({"parent_id": uid}) > 0 or \
-           await folders_collection.count_documents({"parent_id": uid}) > 0:
-            return JSONResponse(status_code=400, content={"error": "Folder not empty"})
+        # Check if empty (Prevent deleting non-empty folders for safety)
+        if (await files_collection.count_documents({"parent_id": uid}) > 0 or 
+            await folders_collection.count_documents({"parent_id": uid}) > 0):
+             return JSONResponse(status_code=400, content={"error": "Folder not empty"})
         await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
     else:
         await files_collection.delete_one({"uid": uid, "owner": user["username"]})
@@ -215,7 +204,7 @@ async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
 @app.get("/dl/{uid}")
 async def download_file(uid: str):
     file_data = await files_collection.find_one({"uid": uid})
-    if not file_data: raise HTTPException(status_code=404, detail="Not found")
+    if not file_data: raise HTTPException(status_code=404, detail="File not found")
     
     async def streamer():
         async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
