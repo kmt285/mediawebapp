@@ -162,7 +162,9 @@ async def get_content(token: str, folder_id: Optional[str] = "root"):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
     
-    query = {"owner": user["username"], "parent_id": folder_id if folder_id != "root" else None}
+    # Root ဆိုရင် parent_id က None ဖြစ်ရမယ်
+    query_id = None if folder_id == "root" else folder_id
+    query = {"owner": user["username"], "parent_id": query_id}
     
     folders = [{"uid": f["uid"], "name": f["name"], "type": "folder"} 
                async for f in folders_collection.find(query).sort("name", 1)]
