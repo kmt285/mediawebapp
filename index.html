@@ -366,9 +366,10 @@
                         </div>`;
                 });
 
+                // Files (Double Click ဖြင့် ဖွင့်ရန် ပြင်ဆင်ထားသည်)
                 data.files.forEach(f => {
                     grid.innerHTML += `
-                        <div class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
+                        <div ondblclick="window.open('/view/${f.uid}', '_blank')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
                             ${getFileIcon(f.name)}
                             <div class="w-full text-center">
                                 <p class="text-xs text-gray-200 truncate w-full select-none font-medium">${f.name}</p>
@@ -376,9 +377,9 @@
                             </div>
                             
                             <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-                                <button onclick="copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
-                                <a href="/dl/${f.uid}" target="_blank" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-download text-xs"></i></a>
-                                <button onclick="deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
+                                <button onclick="event.stopPropagation(); copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
+                                <a href="/dl/${f.uid}" target="_blank" onclick="event.stopPropagation()" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-download text-xs"></i></a>
+                                <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
                             </div>
                         </div>`;
                 });
