@@ -130,12 +130,20 @@
             xhr.onload = () => {
                 if (xhr.status === 200) {
                     const response = JSON.parse(xhr.responseText);
+                    
+                    // Error Handling (ဒီအချက်က အရေးကြီးဆုံးပါ)
+                    if (response.error) {
+                        alert("Error: " + response.error); // Error ကို message box နဲ့ပြမယ်
+                        progressArea.classList.add('hidden');
+                        dropZone.classList.remove('hidden');
+                        return;
+                    }
+
                     progressArea.classList.add('hidden');
                     resultArea.classList.remove('hidden');
-                    // Construct Full URL
                     shareLink.value = window.location.origin + response.download_url;
                 } else {
-                    alert("Upload Failed!");
+                    alert("Server Error!");
                     location.reload();
                 }
             };
