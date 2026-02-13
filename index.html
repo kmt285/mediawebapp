@@ -120,45 +120,62 @@
         }
         checkLogin();
 
+        // --- Helper: Send Form Data safely ---
+        async function sendAuthData(url, username, password) {
+            const params = new URLSearchParams();
+            params.append('username', username);
+            params.append('password', password);
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params
+                });
+                const data = await res.json();
+                return { ok: res.ok, data: data, status: res.status };
+            } catch (e) {
+                return { ok: false, data: { detail: "Connection Error" } };
+            }
+        }
+
         // --- API Calls ---
 
         async function register() {
             const user = document.getElementById('r-user').value;
             const pass = document.getElementById('r-pass').value;
-            const formData = new FormData();
-            formData.append('username', user);
-            formData.append('password', pass);
 
-            const res = await fetch('/register', { method: 'POST', body: formData });
-            if (res.ok) { alert('Success! Please Login.'); toggleAuth('login'); }
-            else { alert('Error: Username might exist'); }
+            if (!user || !pass) { alert("Please fill in all fields"); return; }
+
+            const result = await sendAuthData('/register', user, pass);
+            
+            if (result.ok) {
+                alert('Account created! Logging you in...');
+                // Auto Login after register
+                document.getElementById('l-user').value = user;
+                document.getElementById('l-pass').value = pass;
+                login(); 
+            } else {
+                alert('Register Failed: ' + (result.data.error || result.data.detail || 'Unknown Error'));
+            }
         }
 
         async function login() {
             const user = document.getElementById('l-user').value;
             const pass = document.getElementById('l-pass').value;
-            
-            // ပြင်ဆင်ချက်: FormData အစား URLSearchParams ကို သုံးပါမယ်
-            const formBody = new URLSearchParams();
-            formBody.append('username', user);
-            formBody.append('password', pass);
 
-            const res = await fetch('/token', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, // Header ထည့်ပေးလိုက်တယ်
-                body: formBody 
-            });
+            if (!user || !pass) { alert("Please fill in all fields"); return; }
+
+            // Endpoint is /token for OAuth2
+            const result = await sendAuthData('/token', user, pass);
             
-            const data = await res.json();
-            
-            if (res.ok) {
-                localStorage.setItem('token', data.access_token);
-                localStorage.setItem('username', data.username);
+            if (result.ok) {
+                localStorage.setItem('token', result.data.access_token);
+                localStorage.setItem('username', result.data.username);
                 checkLogin();
                 showSection('home');
             } else {
-                // Error အတိအကျသိရအောင် alert ထုတ်ကြည့်မယ်
-                alert('Login Failed: ' + (data.detail || 'Unknown Error'));
+                alert('Login Failed: ' + (result.data.detail || 'Check username/password'));
             }
         }
 
@@ -172,6 +189,11 @@
         const fileInput = document.getElementById('fileInput');
         
         dropZone.onclick = () => fileInput.click();
+        
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-blue-500'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-blue-500'));
+        dropZone.addEventListener('drop', (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); });
+
         fileInput.onchange = (e) => handleFile(e.target.files[0]);
 
         function handleFile(file) {
@@ -182,7 +204,6 @@
             const formData = new FormData();
             formData.append("file", file);
             
-            // If logged in, send token
             const token = localStorage.getItem('token');
             if (token) formData.append("token", token);
 
@@ -198,13 +219,18 @@
             };
 
             xhr.onload = () => {
-                const resp = JSON.parse(xhr.responseText);
-                if (xhr.status === 200) {
-                    document.getElementById('progressArea').classList.add('hidden');
-                    document.getElementById('resultArea').classList.remove('hidden');
-                    document.getElementById('shareLink').value = window.location.origin + resp.download_url;
-                } else {
-                    alert('Error: ' + (resp.error || 'Upload failed'));
+                try {
+                    const resp = JSON.parse(xhr.responseText);
+                    if (xhr.status === 200) {
+                        document.getElementById('progressArea').classList.add('hidden');
+                        document.getElementById('resultArea').classList.remove('hidden');
+                        document.getElementById('shareLink').value = window.location.origin + resp.download_url;
+                    } else {
+                        alert('Error: ' + (resp.error || resp.detail || 'Upload failed'));
+                        location.reload();
+                    }
+                } catch (e) {
+                    alert("Server Error. Check Logs.");
                     location.reload();
                 }
             };
@@ -217,31 +243,35 @@
             const list = document.getElementById('fileList');
             list.innerHTML = '<p class="text-center text-gray-500">Loading...</p>';
 
-            const res = await fetch('/api/myfiles?token=' + token);
-            if (!res.ok) { doLogout(); return; }
-            
-            const files = await res.json();
-            if (files.length === 0) {
-                list.innerHTML = '<p class="text-center text-gray-500">No files uploaded yet.</p>';
-                return;
-            }
+            try {
+                const res = await fetch('/api/myfiles?token=' + token);
+                if (res.status === 401 || res.status === 403) { doLogout(); return; }
+                
+                const files = await res.json();
+                if (!Array.isArray(files) || files.length === 0) {
+                    list.innerHTML = '<p class="text-center text-gray-500">No files uploaded yet.</p>';
+                    return;
+                }
 
-            let html = '';
-            files.forEach(f => {
-                html += `
-                    <div class="bg-gray-800 p-4 rounded flex justify-between items-center border border-gray-700 hover:border-blue-500">
-                        <div>
-                            <p class="font-bold text-sm text-gray-200">${f.filename}</p>
-                            <p class="text-xs text-gray-500">${f.size} • ${f.date}</p>
+                let html = '';
+                files.forEach(f => {
+                    html += `
+                        <div class="bg-gray-800 p-4 rounded flex justify-between items-center border border-gray-700 hover:border-blue-500">
+                            <div class="overflow-hidden">
+                                <p class="font-bold text-sm text-gray-200 truncate">${f.filename}</p>
+                                <p class="text-xs text-gray-500">${f.size} • ${f.date}</p>
+                            </div>
+                            <div class="flex gap-3 shrink-0">
+                                <a href="/dl/${f.uid}" target="_blank" class="text-blue-400 hover:text-white"><i class="fas fa-download"></i></a>
+                                <button onclick="deleteFile('${f.uid}')" class="text-red-400 hover:text-red-300"><i class="fas fa-trash"></i></button>
+                            </div>
                         </div>
-                        <div class="flex gap-3">
-                            <a href="/dl/${f.uid}" target="_blank" class="text-blue-400 hover:text-white"><i class="fas fa-download"></i></a>
-                            <button onclick="deleteFile('${f.uid}')" class="text-red-400 hover:text-red-300"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </div>
-                `;
-            });
-            list.innerHTML = html;
+                    `;
+                });
+                list.innerHTML = html;
+            } catch (e) {
+                list.innerHTML = '<p class="text-center text-red-500">Failed to load files.</p>';
+            }
         }
 
         async function deleteFile(uid) {
