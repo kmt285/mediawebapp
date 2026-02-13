@@ -66,25 +66,28 @@
 
         <div id="view-drive" class="hidden h-full flex flex-col bg-gray-900">
             
-            <div class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-20">
-                <div class="flex items-center gap-2 text-sm text-gray-300 overflow-x-auto whitespace-nowrap" id="breadcrumbs">
-                    <div class="flex items-center gap-2 bg-gray-700 rounded px-3 py-1 ml-4">
-                        <i class="fas fa-search text-gray-400"></i>
-                        <input type="text" id="search-box" onkeyup="doSearch()" placeholder="Search..." class="bg-transparent border-none outline-none text-white text-sm w-24 focus:w-40 transition-all">
-                    </div>
-                    <span class="font-bold">Home</span>
-                </div>
+            <div class="bg-gray-800 border-b border-gray-700 p-4 flex flex-wrap justify-between items-center shadow-md z-20 gap-4">
+    
+    <div class="flex items-center gap-2 text-sm text-gray-300 overflow-x-auto whitespace-nowrap" id="breadcrumbs">
+        <span class="font-bold">Home</span>
+    </div>
 
-                <div class="flex gap-3 shrink-0">
-                    <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
-                        <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
-                    </button>
-                    <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
-                        <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
-                        <input type="file" id="drive-file" class="hidden" onchange="driveUpload(this.files[0])">
-                    </label>
-                </div>
-            </div>
+    <div class="flex items-center gap-2 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 flex-grow max-w-sm ml-0 sm:ml-4">
+        <i class="fas fa-search text-gray-400"></i>
+        <input type="text" id="search-box" onkeyup="doSearch()" placeholder="Search files..." class="bg-transparent border-none outline-none text-white text-sm w-full transition-all">
+    </div>
+
+    <div class="flex gap-3 shrink-0 ml-auto">
+        <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
+            <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
+        </button>
+        <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
+            <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
+            <input type="file" id="drive-file" class="hidden" onchange="driveUpload(this.files[0])">
+        </label>
+    </div>
+
+</div>
 
             <div id="drive-progress" class="hidden w-full h-1 bg-gray-700">
                 <div id="drive-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 0%"></div>
