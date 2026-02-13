@@ -68,6 +68,10 @@
             
             <div class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-20">
                 <div class="flex items-center gap-2 text-sm text-gray-300 overflow-x-auto whitespace-nowrap" id="breadcrumbs">
+                    <div class="flex items-center gap-2 bg-gray-700 rounded px-3 py-1 ml-4">
+                        <i class="fas fa-search text-gray-400"></i>
+                        <input type="text" id="search-box" onkeyup="doSearch()" placeholder="Search..." class="bg-transparent border-none outline-none text-white text-sm w-24 focus:w-40 transition-all">
+                    </div>
                     <span class="font-bold">Home</span>
                 </div>
 
@@ -184,83 +188,91 @@
             document.getElementById('guest-dropzone').classList.remove('hidden');
         }
 
-        // --- DRIVE LOGIC ---
-        async function loadDriveContent() {
+        // --- Search & Icon Helpers (New) ---
+        let searchTimeout;
+        function doSearch() {
+            clearTimeout(searchTimeout);
+            const query = document.getElementById('search-box').value;
+            searchTimeout = setTimeout(() => { loadDriveContent(query); }, 500);
+        }
+
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return '<i class="fas fa-image text-purple-400 text-3xl mb-1"></i>';
+            if (['mp4', 'mkv', 'mov', 'avi'].includes(ext)) return '<i class="fas fa-video text-red-400 text-3xl mb-1"></i>';
+            if (['mp3', 'wav', 'ogg'].includes(ext)) return '<i class="fas fa-music text-pink-400 text-3xl mb-1"></i>';
+            if (['pdf'].includes(ext)) return '<i class="fas fa-file-pdf text-red-500 text-3xl mb-1"></i>';
+            if (['zip', 'rar', '7z'].includes(ext)) return '<i class="fas fa-file-archive text-yellow-500 text-3xl mb-1"></i>';
+            if (['py', 'js', 'html', 'css'].includes(ext)) return '<i class="fas fa-file-code text-green-400 text-3xl mb-1"></i>';
+            return '<i class="fas fa-file-alt text-blue-400 text-3xl mb-1"></i>';
+        }
+
+        function copyLink(uid) {
+            const link = window.location.origin + '/dl/' + uid;
+            navigator.clipboard.writeText(link).then(() => alert('Public Link Copied!'));
+        }
+
+        // --- UPDATED DRIVE LOGIC ---
+        async function loadDriveContent(searchQuery = "") {
             const grid = document.getElementById('drive-grid');
             const token = localStorage.getItem('token');
             
-            // Loading ပြမယ်
             grid.innerHTML = '<div class="col-span-full flex justify-center mt-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i></div>';
             
             try {
-                // API ခေါ်မယ်
-                console.log("Fetching content for folder:", currentFolder);
-                const res = await fetch(`/api/content?folder_id=${currentFolder}`, {
-                    headers: {'Authorization': `Bearer ${token}`}
-                });
+                let url = `/api/content?folder_id=${currentFolder}`;
+                if(searchQuery) url = `/api/content?q=${encodeURIComponent(searchQuery)}`;
+
+                const res = await fetch(url, { headers: {'Authorization': `Bearer ${token}`} });
                 
-                // Login မဝင်ရသေးရင် ထွက်မယ်
-                if(res.status === 401) { 
-                    console.log("Unauthorized, logging out...");
-                    logout(); 
-                    return; 
-                }
+                if(res.status === 401) { logout(); return; }
 
                 const data = await res.json();
-                console.log("Data received:", data); // Data ရမရ စစ်မယ်
+                grid.innerHTML = '';
 
-                grid.innerHTML = ''; // အဟောင်းရှင်းမယ်
-
-                // ဘာမှမရှိရင် Empty ပြမယ်
                 if(!data.folders.length && !data.files.length) {
                     grid.innerHTML = `
                         <div class="col-span-full flex flex-col items-center justify-center mt-20 text-gray-500 opacity-50">
                             <i class="fas fa-folder-open text-6xl mb-4"></i>
-                            <p>Empty Folder</p>
+                            <p>Empty / No Result</p>
                         </div>`;
-                    updateBreadcrumbs();
+                    if(!searchQuery) updateBreadcrumbs();
                     return;
                 }
 
-                // 1. Folders အရင်ပြမယ်
+                // Folders
                 data.folders.forEach(f => {
                     grid.innerHTML += `
                         <div ondblclick="enterFolder('${f.uid}', '${f.name}')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32">
                             <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
                             <p class="text-sm text-center text-gray-200 truncate w-full px-2 select-none">${f.name}</p>
-                            
-                            <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="absolute top-2 right-2 hidden group-hover:block text-red-400 hover:text-white bg-gray-900 rounded-full w-6 h-6 flex items-center justify-center">
-                                <i class="fas fa-times text-xs"></i>
-                            </button>
+                            <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="absolute top-2 right-2 hidden group-hover:block text-red-400 hover:text-white bg-gray-900 rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-times text-xs"></i></button>
                         </div>`;
                 });
 
-                // 2. Files ဆက်ပြမယ်
+                // Files (With New Icons & Share Button)
                 data.files.forEach(f => {
                     grid.innerHTML += `
                         <div class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
-                            <i class="fas fa-file-alt text-blue-400 text-3xl mb-1 drop-shadow-md"></i>
+                            ${getFileIcon(f.name)}
                             <div class="w-full text-center">
                                 <p class="text-xs text-gray-200 truncate w-full select-none font-medium">${f.name}</p>
                                 <p class="text-[10px] text-gray-500 mt-1">${f.size}</p>
                             </div>
                             
                             <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-                                <a href="/dl/${f.uid}" target="_blank" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Download">
-                                    <i class="fas fa-download text-xs"></i>
-                                </a>
-                                <button onclick="deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Delete">
-                                    <i class="fas fa-trash text-xs"></i>
-                                </button>
+                                <button onclick="copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
+                                <a href="/dl/${f.uid}" target="_blank" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-download text-xs"></i></a>
+                                <button onclick="deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-trash text-xs"></i></button>
                             </div>
                         </div>`;
                 });
                 
-                updateBreadcrumbs();
+                if(!searchQuery) updateBreadcrumbs();
 
             } catch(e) { 
-                console.error("Error loading content:", e);
-                grid.innerHTML = '<p class="text-red-400 col-span-full text-center mt-10">Error loading files. Check Console.</p>';
+                console.error(e);
+                grid.innerHTML = '<p class="text-red-400 col-span-full text-center mt-10">Error loading.</p>';
             }
         }
 
