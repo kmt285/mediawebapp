@@ -19,7 +19,7 @@ MONGO_URL = os.environ.get("MONGO_URL", "your_mongodb_url") # ပြင်ရန
 
 # --- Setup ---
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=".")
 
 # Database Setup
 mongo_client = AsyncIOMotorClient(MONGO_URL)
