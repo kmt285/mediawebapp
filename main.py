@@ -64,6 +64,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
 
 # --- Models ---
+class CreateFolderRequest(BaseModel):
+    name: str
+    parent_id: Optional[str] = "root"
+
 class RenameRequest(BaseModel):
     uid: str
     new_name: str
@@ -284,6 +288,24 @@ async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     field = "name" if req.type == "folder" else "filename"
     await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {field: req.new_name}})
     return {"message": "Renamed"}
+
+@app.delete("/api/delete/{uid}")
+async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: 
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    if type == "folder":
+        # Folder ကို Database ထဲကနေ ဖျက်မယ်
+        result = await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
+    elif type == "file":
+        # File ကို Database ထဲကနေ ဖျက်မယ်
+        result = await files_collection.delete_one({"uid": uid, "owner": user["username"]})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    return {"message": "Deleted successfully"}
 
 # --- Password Prompt HTML Helper ---
 def get_password_prompt_html(uid: str, action: str, error: str = ""):
