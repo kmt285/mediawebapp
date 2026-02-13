@@ -158,7 +158,7 @@ async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_sc
     return {"message": "Created"}
 
 @app.get("/api/content")
-async def get_content(token: str, folder_id: Optional[str] = "root"):
+async def get_content(folder_id: Optional[str] = "root", token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
     
