@@ -3,6 +3,7 @@ import time
 import uuid
 import uvicorn
 import aiofiles
+import mimetypes
 from typing import Optional, List
 from datetime import datetime, timedelta
 from authlib.integrations.starlette_client import OAuth
@@ -297,6 +298,26 @@ async def download_file(uid: str):
         async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
             
     return StreamingResponse(streamer(), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_data["filename"]}"'})
+
+@app.get("/view/{uid}")
+async def view_file(uid: str):
+    file_data = await files_collection.find_one({"uid": uid})
+    if not file_data: raise HTTPException(status_code=404, detail="File not found")
+    
+    # ဖိုင်အမျိုးအစား (Mime Type) ကို ခန့်မှန်းမယ် (ဥပမာ - .mp4 ဆိုရင် video/mp4)
+    mime_type, _ = mimetypes.guess_type(file_data["filename"])
+    if not mime_type:
+        mime_type = "application/octet-stream"
+        
+    async def streamer():
+        async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
+            
+    # inline လို့ပေးလိုက်ရင် Browser က Download မလုပ်ဘဲ တိုက်ရိုက်ဖွင့်ပြပါမယ်
+    return StreamingResponse(
+        streamer(), 
+        media_type=mime_type, 
+        headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'}
+    )
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
