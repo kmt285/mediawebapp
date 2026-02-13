@@ -104,22 +104,40 @@
     </div>
 
     <div id="login-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
-        <div class="glass p-8 rounded-xl w-80">
+        <div class="glass p-8 rounded-xl w-80 shadow-2xl">
             <h2 class="text-xl font-bold mb-4">Login</h2>
-            <input id="l-user" type="text" placeholder="Username" class="w-full bg-gray-800 p-2 rounded mb-2 border border-gray-600">
-            <input id="l-pass" type="password" placeholder="Password" class="w-full bg-gray-800 p-2 rounded mb-4 border border-gray-600">
-            <button onclick="doLogin()" class="w-full bg-blue-600 py-2 rounded hover:bg-blue-700">Login</button>
-            <button onclick="toggleModal('login-modal')" class="w-full mt-2 text-sm text-gray-400">Cancel</button>
+            <input id="l-user" type="text" placeholder="Username" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-blue-500 outline-none">
+            <input id="l-pass" type="password" placeholder="Password" class="w-full bg-gray-900 p-2 rounded mb-4 border border-gray-600 focus:border-blue-500 outline-none">
+            
+            <div class="flex gap-2 mb-3">
+                <button onclick="doLogin()" class="flex-1 bg-blue-600 py-2 rounded hover:bg-blue-500 text-white font-medium transition">
+                    Login
+                </button>
+                <a href="/login/google" class="flex-1 bg-white text-gray-900 py-2 rounded flex items-center justify-center gap-2 hover:bg-gray-200 transition font-medium">
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-4 h-4" alt="G"> Google
+                </a>
+            </div>
+            
+            <button onclick="toggleModal('login-modal')" class="w-full mt-2 text-sm text-gray-400 hover:text-white transition">Cancel</button>
         </div>
     </div>
 
     <div id="register-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
-        <div class="glass p-8 rounded-xl w-80">
+        <div class="glass p-8 rounded-xl w-80 shadow-2xl">
             <h2 class="text-xl font-bold mb-4 text-green-400">Register</h2>
-            <input id="r-user" type="text" placeholder="Username" class="w-full bg-gray-800 p-2 rounded mb-2 border border-gray-600">
-            <input id="r-pass" type="password" placeholder="Password" class="w-full bg-gray-800 p-2 rounded mb-4 border border-gray-600">
-            <button onclick="doRegister()" class="w-full bg-green-600 py-2 rounded hover:bg-green-700">Sign Up</button>
-            <button onclick="toggleModal('register-modal')" class="w-full mt-2 text-sm text-gray-400">Cancel</button>
+            <input id="r-user" type="text" placeholder="Username" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-green-500 outline-none">
+            <input id="r-pass" type="password" placeholder="Password" class="w-full bg-gray-900 p-2 rounded mb-4 border border-gray-600 focus:border-green-500 outline-none">
+            
+            <div class="flex gap-2 mb-3">
+                <button onclick="doRegister()" class="flex-1 bg-green-600 py-2 rounded hover:bg-green-500 text-white font-medium transition">
+                    Sign Up
+                </button>
+                <a href="/login/google" class="flex-1 bg-white text-gray-900 py-2 rounded flex items-center justify-center gap-2 hover:bg-gray-200 transition font-medium">
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-4 h-4" alt="G"> Google
+                </a>
+            </div>
+            
+            <button onclick="toggleModal('register-modal')" class="w-full mt-2 text-sm text-gray-400 hover:text-white transition">Cancel</button>
         </div>
     </div>
     <div class="flex items-center my-4">
