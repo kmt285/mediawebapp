@@ -213,6 +213,24 @@
             };
         }
         function closePasswordModal() { document.getElementById('password-modal').classList.add('hidden'); }
+
+        // --- Rename Logic ---
+        function renameItem(uid, oldName, type) {
+            // အရင်ကလုပ်ခဲ့တဲ့ Custom Prompt Box လေးကိုပဲ ပြန်သုံးထားပါတယ်
+            openPrompt(`Rename ${type}`, oldName, async (newName) => {
+                if(newName === oldName || !newName) return; // နာမည်မပြောင်းရင် ဘာမှမလုပ်ဘူး
+                
+                const token = localStorage.getItem('token');
+                await fetch('/api/rename', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                    body: JSON.stringify({uid: uid, new_name: newName, type: type})
+                });
+                
+                showToast("Renamed Successfully! ✨");
+                loadDriveContent(); // UI ကို Refresh လုပ်မယ်
+            });
+        }
         
         // --- UI HELPERS (New Professional Look) ---
         function showToast(msg, type = 'success') {
@@ -400,23 +418,27 @@
                     return;
                 }
 
+                // Folders (With Rename Button)
                 data.folders.forEach(f => {
                     grid.innerHTML += `
                         <div ondblclick="enterFolder('${f.uid}', '${f.name}')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32">
                             <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
                             <p class="text-sm text-center text-gray-200 truncate w-full px-2 select-none">${f.name}</p>
-                            <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="absolute top-2 right-2 hidden group-hover:block text-red-400 hover:text-white bg-gray-900 rounded-full w-6 h-6 flex items-center justify-center"><i class="fas fa-times text-xs"></i></button>
+                            
+                            <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
+                                <button onclick="event.stopPropagation(); renameItem('${f.uid}', '${f.name}', 'folder')" class="bg-gray-900 text-blue-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Rename"><i class="fas fa-pen text-xs"></i></button>
+                                <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Delete"><i class="fas fa-times text-xs"></i></button>
+                            </div>
                         </div>`;
                 });
-
                 // Files (Double Click ဖြင့် ဖွင့်ရန် ပြင်ဆင်ထားသည်)
                 // Files (With Password Lock Button)
+                // Files (With Rename Button added)
                 data.files.forEach(f => {
                     let displayIcon = f.has_thumb 
                         ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600">` 
                         : getFileIcon(f.name);
 
-                    // Password ရှိ/မရှိ ပေါ်မူတည်ပြီး သော့ခလုတ်ပုံစံ ပြောင်းမယ်
                     let lockIcon = f.has_password 
                         ? '<i class="fas fa-lock text-red-400 text-xs"></i>' 
                         : '<i class="fas fa-unlock text-gray-400 text-xs"></i>';
@@ -431,7 +453,8 @@
                                 <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
                             </div>
                             
-                            <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
+                            <div class="absolute top-1 right-1 hidden group-hover:flex flex-wrap justify-end w-16 gap-1 z-10">
+                                <button onclick="event.stopPropagation(); renameItem('${f.uid}', '${f.name}', 'file')" class="bg-gray-900 text-blue-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Rename"><i class="fas fa-pen text-xs"></i></button>
                                 <button onclick="event.stopPropagation(); openPasswordModal('${f.uid}', ${f.has_password})" class="bg-gray-900 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Set Password">${lockIcon}</button>
                                 <button onclick="event.stopPropagation(); copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
                                 <a href="/dl/${f.uid}" target="_blank" onclick="event.stopPropagation()" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80"><i class="fas fa-download text-xs"></i></a>
