@@ -69,9 +69,9 @@ class RenameRequest(BaseModel):
     new_name: str
     type: str
 
-class CreateFolderRequest(BaseModel):
-    name: str
-    parent_id: Optional[str] = None
+class SetPasswordRequest(BaseModel):
+    uid: str
+    password: Optional[str] = None
 
 # --- Helpers ---
 def get_password_hash(password): return pwd_context.hash(password)
@@ -271,7 +271,8 @@ async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None
             "size": f"{round(f['size']/1024/1024, 2)} MB",
             "type": "file",
             "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date'])),
-            "has_thumb": bool(f.get("thumb_id")) # Thumbnail ပါ/မပါ စစ်ပေးလိုက်မယ်
+            "has_thumb": bool(f.get("thumb_id")),
+            "has_password": bool(f.get("share_password")) # ဒီစာကြောင်း အသစ်တိုးလာတာပါ
         })
     return {"folders": folders, "files": files}
     
@@ -284,60 +285,84 @@ async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {field: req.new_name}})
     return {"message": "Renamed"}
 
-@app.delete("/api/delete/{uid}")
-async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
-    user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401)
-    if type == "folder":
-        # Check if empty (Prevent deleting non-empty folders for safety)
-        if (await files_collection.count_documents({"parent_id": uid}) > 0 or 
-            await folders_collection.count_documents({"parent_id": uid}) > 0):
-             return JSONResponse(status_code=400, content={"error": "Folder not empty"})
-        await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
-    else:
-        await files_collection.delete_one({"uid": uid, "owner": user["username"]})
-    return {"message": "Deleted"}
+# --- Password Prompt HTML Helper ---
+def get_password_prompt_html(uid: str, action: str, error: str = ""):
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Protected File</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-gray-900 h-screen flex items-center justify-center font-sans">
+        <div class="bg-gray-800 p-8 rounded-xl shadow-2xl w-80 text-center border border-gray-700">
+            <i class="fas fa-lock text-5xl text-yellow-500 mb-4 drop-shadow-lg"></i>
+            <h2 class="text-white text-xl font-bold mb-2">Protected File</h2>
+            <p class="text-gray-400 text-sm mb-6">Enter password to access this file</p>
+            {"<p class='text-red-400 text-xs mb-3 bg-red-900/30 py-1 rounded'>" + error + "</p>" if error else ""}
+            <form action="/{action}/{uid}" method="GET" class="flex flex-col gap-3">
+                <input type="password" name="pwd" placeholder="Enter Password" required class="bg-gray-900 border border-gray-600 rounded p-2 text-white outline-none focus:border-blue-500 text-center">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded transition">
+                    Unlock File
+                </button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
 
+# --- File Access Routes (Protected) ---
 @app.get("/dl/{uid}")
-async def download_file(uid: str):
+async def download_file(uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
     if not file_data: raise HTTPException(status_code=404, detail="File not found")
     
+    # Password စစ်ဆေးခြင်း
+    req_pwd = file_data.get("share_password")
+    if req_pwd:
+        if not pwd: return HTMLResponse(get_password_prompt_html(uid, "dl"))
+        if pwd != req_pwd: return HTMLResponse(get_password_prompt_html(uid, "dl", "Incorrect password!"))
+
     async def streamer():
         async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
-            
     return StreamingResponse(streamer(), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_data["filename"]}"'})
 
 @app.get("/view/{uid}")
-async def view_file(uid: str):
+async def view_file(uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
     if not file_data: raise HTTPException(status_code=404, detail="File not found")
     
-    # ဖိုင်အမျိုးအစား (Mime Type) ကို ခန့်မှန်းမယ် (ဥပမာ - .mp4 ဆိုရင် video/mp4)
+    # Password စစ်ဆေးခြင်း
+    req_pwd = file_data.get("share_password")
+    if req_pwd:
+        if not pwd: return HTMLResponse(get_password_prompt_html(uid, "view"))
+        if pwd != req_pwd: return HTMLResponse(get_password_prompt_html(uid, "view", "Incorrect password!"))
+
     mime_type, _ = mimetypes.guess_type(file_data["filename"])
-    if not mime_type:
-        mime_type = "application/octet-stream"
-        
+    if not mime_type: mime_type = "application/octet-stream"
+    
     async def streamer():
         async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
-            
-    # inline လို့ပေးလိုက်ရင် Browser က Download မလုပ်ဘဲ တိုက်ရိုက်ဖွင့်ပြပါမယ်
-    return StreamingResponse(
-        streamer(), 
-        media_type=mime_type, 
-        headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'}
-    )
+    return StreamingResponse(streamer(), media_type=mime_type, headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'})
 
 @app.get("/thumb/{uid}")
 async def get_thumbnail(uid: str):
     file_data = await files_collection.find_one({"uid": uid})
-    if not file_data or not file_data.get("thumb_id"):
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
-    
+    if not file_data or not file_data.get("thumb_id"): raise HTTPException(status_code=404)
     async def streamer():
         async for chunk in bot.stream_media(file_data["thumb_id"]): yield chunk
-            
     return StreamingResponse(streamer(), media_type="image/jpeg")
+
+# --- Set Password API ---
+@app.put("/api/file/password")
+async def set_file_password(req: SetPasswordRequest, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    await files_collection.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {"share_password": req.password}})
+    return {"message": "Password updated"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
