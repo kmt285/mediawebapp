@@ -6,3 +6,5 @@ tgcrypto
 motor
 jinja2
 aiofiles
+python-jose[cryptography]
+passlib[bcrypt]
