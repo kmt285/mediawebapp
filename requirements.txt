@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-multipart
+pyrogram
+tgcrypto
+motor
+jinja2
+aiofiles
