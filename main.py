@@ -197,6 +197,7 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
+    # aiofiles ဖြင့် သိမ်းခြင်း (Non-blocking)
     async with aiofiles.open(file_loc, "wb") as f:
         while content := await file.read(1024 * 1024):
             await f.write(content)
@@ -223,6 +224,11 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
         await files_collection.insert_one(file_data)
         
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
+
+    except Exception as e:
+        # ဒီ except block ပျောက်သွားလို့ Error တက်တာပါ
+        if os.path.exists(file_loc): os.remove(file_loc)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # Drive API (User Only)
 @app.post("/api/folder")
