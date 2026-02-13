@@ -367,13 +367,21 @@
                 });
 
                 // Files (Double Click ဖြင့် ဖွင့်ရန် ပြင်ဆင်ထားသည်)
+                // Files (Thumbnail ပါရင် ပုံပေါ်မယ်၊ မပါရင် Icon ပေါ်မယ်)
                 data.files.forEach(f => {
+                    // Thumbnail ရှိမရှိ စစ်ဆေးခြင်း
+                    let displayIcon = f.has_thumb 
+                        ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600">` 
+                        : getFileIcon(f.name);
+
                     grid.innerHTML += `
                         <div ondblclick="window.open('/view/${f.uid}', '_blank')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
-                            ${getFileIcon(f.name)}
-                            <div class="w-full text-center">
+                            
+                            ${displayIcon}
+                            
+                            <div class="w-full text-center mt-auto">
                                 <p class="text-xs text-gray-200 truncate w-full select-none font-medium">${f.name}</p>
-                                <p class="text-[10px] text-gray-500 mt-1">${f.size}</p>
+                                <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
                             </div>
                             
                             <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
