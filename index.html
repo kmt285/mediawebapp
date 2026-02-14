@@ -43,7 +43,7 @@
                 <div id="guest-dropzone" class="border-2 border-dashed border-gray-600 rounded-xl p-12 cursor-pointer hover:border-blue-500 hover:bg-gray-800/50 transition" onclick="document.getElementById('guest-file').click()">
                     <i class="fas fa-cloud-upload-alt text-6xl text-blue-500 mb-4"></i>
                     <p class="text-lg">Click to Upload</p>
-                    <input type="file" id="guest-file" class="hidden" onchange="guestUpload(this.files[0])">
+                    <input type="file" id="guest-file" class="hidden" multiple onchange="guestUpload(this.files)">
                 </div>
 
                 <div id="guest-progress" class="hidden mt-6">
@@ -83,7 +83,7 @@
         </button>
         <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
             <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
-            <input type="file" id="drive-file" class="hidden" onchange="driveUpload(this.files[0])">
+            <input type="file" id="drive-file" class="hidden" multiple onchange="driveUpload(this.files)">
         </label>
     </div>
 
@@ -313,44 +313,43 @@
             }
         }
 
-        // --- GUEST ---
-        function guestUpload(file) {
-            if(!file) return;
-            document.getElementById('guest-dropzone').classList.add('hidden');
-            document.getElementById('guest-progress').classList.remove('hidden');
-            
-            const fd = new FormData();
-            fd.append('file', file);
-            
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-            
-            xhr.upload.onprogress = (e) => {
-                const p = (e.loaded/e.total)*100;
-                document.getElementById('guest-bar').style.width = p + "%";
-            };
-            
-            xhr.onload = () => {
-                const res = JSON.parse(xhr.responseText);
-                document.getElementById('guest-progress').classList.add('hidden');
-                
-                if(xhr.status === 200) {
-                    document.getElementById('guest-result').classList.remove('hidden');
-                    document.getElementById('guest-link').value = window.location.origin + res.download_url;
-                    showToast("Upload Complete!", "success");
-                } else {
-                    showToast(res.error || 'Upload Failed', 'error');
-                    resetGuest();
-                }
-            };
-            xhr.send(fd);
+       // --- GUEST UPLOAD FUNCTION ---
+function guestUpload(files) {
+    if(!files || files.length === 0) return; // ဖိုင်မရှိရင် ဘာမှမလုပ်ဘူး
+    document.getElementById('guest-dropzone').classList.add('hidden');
+    document.getElementById('guest-progress').classList.remove('hidden');
+    
+    const fd = new FormData();
+    // Loop ပတ်ပြီး ဖိုင်အကုန်ထည့်မယ် (Name ကို 'files' လို့ပေးရမယ် Backend နဲ့ကိုက်အောင်)
+    for(let i = 0; i < files.length; i++) {
+        fd.append('files', files[i]);
+    }
+    
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload', true);
+    
+    xhr.upload.onprogress = (e) => {
+        // ဖိုင်အားလုံးပေါင်းရဲ့ Progress ကို ပြမယ်
+        const p = (e.loaded/e.total)*100;
+        document.getElementById('guest-bar').style.width = p + "%";
+    };
+    
+    xhr.onload = () => {
+        const res = JSON.parse(xhr.responseText);
+        document.getElementById('guest-progress').classList.add('hidden');
+        
+        if(xhr.status === 200) {
+            document.getElementById('guest-result').classList.remove('hidden');
+            // ပထမဆုံးဖိုင်ရဲ့ Link ကိုပဲ နမူနာပြထားမယ် (သို့) Success Message ပြမယ်
+            document.getElementById('guest-link').value = "Uploads Complete! Check Drive.";
+            showToast(`Uploaded ${files.length} files successfully!`, "success");
+        } else {
+            showToast('Upload Failed', 'error');
+            resetGuest();
         }
-
-        function resetGuest() {
-            document.getElementById('guest-file').value = '';
-            document.getElementById('guest-result').classList.add('hidden');
-            document.getElementById('guest-dropzone').classList.remove('hidden');
-        }
+    };
+    xhr.send(fd);
+}
 
         // --- DRIVE & HELPERS ---
         let searchTimeout;
@@ -479,27 +478,42 @@
             });
         }
 
-        async function driveUpload(file) {
-            if(!file) return;
-            document.getElementById('drive-progress').classList.remove('hidden');
-            const bar = document.getElementById('drive-bar');
-            
-            const fd = new FormData();
-            fd.append('file', file);
-            fd.append('token', localStorage.getItem('token'));
-            fd.append('parent_id', currentFolder);
-            
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-            xhr.upload.onprogress = (e) => { bar.style.width = ((e.loaded/e.total)*100) + "%"; };
-            xhr.onload = () => {
-                document.getElementById('drive-progress').classList.add('hidden');
-                bar.style.width = "0%";
-                showToast("Upload Successful");
-                loadDriveContent();
-            };
-            xhr.send(fd);
+        // --- DRIVE UPLOAD FUNCTION ---
+async function driveUpload(files) {
+    if(!files || files.length === 0) return;
+    document.getElementById('drive-progress').classList.remove('hidden');
+    const bar = document.getElementById('drive-bar');
+    
+    const fd = new FormData();
+    // Token နဲ့ Folder ID ထည့်မယ်
+    fd.append('token', localStorage.getItem('token'));
+    fd.append('parent_id', currentFolder);
+
+    // Loop ပတ်ပြီး ဖိုင်အကုန်ထည့်မယ်
+    for(let i = 0; i < files.length; i++) {
+        fd.append('files', files[i]);
+    }
+    
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload', true);
+    
+    xhr.upload.onprogress = (e) => { 
+        bar.style.width = ((e.loaded/e.total)*100) + "%"; 
+    };
+    
+    xhr.onload = () => {
+        document.getElementById('drive-progress').classList.add('hidden');
+        bar.style.width = "0%";
+        
+        if (xhr.status === 200) {
+            showToast(`Successfully uploaded ${files.length} files!`);
+            loadDriveContent(); // UI ကို Refresh လုပ်မယ်
+        } else {
+            showToast("Some uploads failed", "error");
         }
+    };
+    xhr.send(fd);
+}
 
         function deleteItem(uid, type) {
             openConfirm(async () => {
