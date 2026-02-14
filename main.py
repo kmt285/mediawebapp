@@ -162,14 +162,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await users_collection.find_one({"username": form_data.username})
     if not user or not verify_password(form_data.password, user["password"]):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-    # role ပါ ထည့်ပေးလိုက်ပါ
-    return {
-        "access_token": create_access_token({"sub": user["username"]}), 
-        "token_type": "bearer", 
-        "username": user["username"],
-        "role": user.get("role", "user") # <--- ဒီစာကြောင်း
-    }
+    return {"access_token": create_access_token({"sub": user["username"]}), "token_type": "bearer", "username": user["username"]}
 
 # --- Google Login Routes ---
 
