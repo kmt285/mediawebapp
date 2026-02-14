@@ -335,21 +335,29 @@ function guestUpload(files) {
     };
     
     xhr.onload = () => {
-        const res = JSON.parse(xhr.responseText);
+    // Progress Bar ကို 100% ပြပြီးမှ ဖျောက်မယ်
+    document.getElementById('guest-bar').style.width = "100%";
+    
+    setTimeout(() => {
         document.getElementById('guest-progress').classList.add('hidden');
+        const res = JSON.parse(xhr.responseText);
         
         if(xhr.status === 200) {
             document.getElementById('guest-result').classList.remove('hidden');
-            // ပထမဆုံးဖိုင်ရဲ့ Link ကိုပဲ နမူနာပြထားမယ် (သို့) Success Message ပြမယ်
-            document.getElementById('guest-link').value = "Uploads Complete! Check Drive.";
+            // Result က Array နဲ့လာမှာမို့လို့ results[0].uid ကိုယူမယ်
+            if(res.results && res.results.length > 0) {
+                 // Guest အတွက် Download link ထုတ်ပေးခြင်း
+                 const firstFile = res.results[0];
+                 const link = window.location.origin + '/dl/' + firstFile.uid;
+                 document.getElementById('guest-link').value = link;
+            }
             showToast(`Uploaded ${files.length} files successfully!`, "success");
         } else {
             showToast('Upload Failed', 'error');
             resetGuest();
         }
-    };
-    xhr.send(fd);
-}
+    }, 500); // 0.5 စက္ကန့်စောင့်
+};
 
         // --- DRIVE & HELPERS ---
         let searchTimeout;
