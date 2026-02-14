@@ -73,6 +73,11 @@ class RenameRequest(BaseModel):
     new_name: str
     type: str
 
+class MoveRequest(BaseModel):
+    uid: str
+    target_parent_id: str
+    type: str
+
 class SetPasswordRequest(BaseModel):
     uid: str
     password: Optional[str] = None
@@ -306,6 +311,35 @@ async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     field = "name" if req.type == "folder" else "filename"
     await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {field: req.new_name}})
     return {"message": "Renamed"}
+
+@app.put("/api/move")
+async def move_item(req: MoveRequest, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    
+    # Target Folder ရှိမရှိ စစ်ဆေးခြင်း (Root မဟုတ်ရင်)
+    if req.target_parent_id != "root":
+        target = await folders_collection.find_one({"uid": req.target_parent_id, "owner": user["username"]})
+        if not target: raise HTTPException(status_code=404, detail="Target folder not found")
+        
+    # ကိုယ့် Folder ကို ကိုယ့်ထဲပြန်ထည့်လို့မရအောင် ကာကွယ်ခြင်း
+    if req.type == "folder" and req.uid == req.target_parent_id:
+        raise HTTPException(status_code=400, detail="Cannot move folder into itself")
+
+    col = folders_collection if req.type == "folder" else files_collection
+    
+    # Parent ID ကို Update လုပ်ခြင်း (နေရာရွှေ့ခြင်း)
+    new_parent = None if req.target_parent_id == "root" else req.target_parent_id
+    
+    result = await col.update_one(
+        {"uid": req.uid, "owner": user["username"]}, 
+        {"$set": {"parent_id": new_parent}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Move failed")
+
+    return {"message": "Moved successfully"}
 
 @app.delete("/api/delete/{uid}")
 async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
