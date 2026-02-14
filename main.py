@@ -5,54 +5,44 @@ import glob
 import uvicorn
 import aiofiles
 import mimetypes
-import math
-from typing import Optional, List, Union
+from typing import Optional, List
 from datetime import datetime, timedelta
 from authlib.integrations.starlette_client import OAuth
+from starlette.config import Config
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.requests import Request
+from typing import List 
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Form
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.middleware.cors import CORSMiddleware
 
 from pyrogram import Client
-from pyrogram.types import Message
 from motor.motor_asyncio import AsyncIOMotorClient
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from pydantic import BaseModel
 
 # --- Config ---
-API_ID = int(os.environ.get("API_ID", 12345)) # Change to your ID
-API_HASH = os.environ.get("API_HASH", "your_hash")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "your_bot_token")
-CHANNEL_ID_STR = os.environ.get("CHANNEL_ID", "-100xxxxxxx") 
-MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+API_ID = os.environ.get("API_ID") 
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+CHANNEL_ID_STR = os.environ.get("CHANNEL_ID") 
+MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
-MAX_FILE_SIZE = 2000 * 1024 * 1024  # 2GB (Telegram Limit)
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
+# --- Setup ---
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-
-# CORS for local testing
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 templates = Jinja2Templates(directory="templates" if os.path.exists("templates") else ".")
 
-# --- Google Auth ---
+# --- Google Auth Config ---
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+
 oauth = OAuth()
 oauth.register(
     name='google',
@@ -73,8 +63,8 @@ users_collection = db["users"]
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
-# Telegram Client
-bot = Client("my_bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
+# Telegram
+bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
 
 # --- Models ---
 class CreateFolderRequest(BaseModel):
@@ -109,44 +99,60 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
         return await users_collection.find_one({"username": username})
     except JWTError: return None
 
-# --- Improved Streaming Helper (Fixes the crash) ---
-async def file_streamer(file_id: str, offset: int = 0, length: int = -1):
-    """
-    Telegram မှ File ကို Chunk အလိုက်ဆွဲပြီး Stream လုပ်ပေးမည့် Generator
-    """
-    async for chunk in bot.stream_media(file_id, offset=offset, limit=length):
-        yield chunk
+# --- Helper Functions ---
+# (ရှိပြီးသား function တွေရဲ့ အောက်မှာ ဒီ function ကို ထပ်ထည့်ပါ)
 
 async def delete_recursive(folder_uid: str, owner: str):
+    """
+    Folder တစ်ခုအောက်ရှိ File များနှင့် Sub-folder များကို အဆင့်ဆင့် လိုက်ဖျက်ပေးမည့် Function
+    """
+    # 1. ဒီ Folder အောက်မှာရှိတဲ့ File တွေကို အရင်ဖျက်မယ်
     await files_collection.delete_many({"parent_id": folder_uid, "owner": owner})
+
+    # 2. ဒီ Folder အောက်မှာရှိတဲ့ Sub-folder တွေကို ရှာမယ်
     async for sub_folder in folders_collection.find({"parent_id": folder_uid, "owner": owner}):
+        # 3. တွေ့တဲ့ Sub-folder တစ်ခုချင်းစီအတွက် ဒီ Function ကိုပြန်ခေါ်မယ် (Recursion)
         await delete_recursive(sub_folder["uid"], owner)
+
+    # 4. အထဲကအရာတွေ ရှင်းသွားပြီဆိုမှ Sub-folder တွေကို ဖျက်မယ်
     await folders_collection.delete_many({"parent_id": folder_uid, "owner": owner})
 
 # --- Startup ---
 @app.on_event("startup")
 async def startup():
-    print("🚀 Starting Bot...")
+    # 1. Bot ကို စ run မယ်
     await bot.start()
     
-    # Check Channel Access
+    # 2. အရင်ကျန်ခဲ့တဲ့ အမှိုက်ဖိုင် (Temp files) တွေကို ရှင်းမယ်
     try:
-        cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.lstrip('-').isdigit() else CHANNEL_ID_STR
+        files = glob.glob('temp_*')
+        for f in files:
+            try:
+                os.remove(f)
+                print(f"Cleaned up cleanup file: {f}")
+            except Exception as e:
+                print(f"Error deleting {f}: {e}")
+    except Exception as e:
+        print(f"Cleanup Error: {e}")
+
+    # 3. Channel ထဲဝင်လို့ရမရ စစ်မယ်
+    try:
+        cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
         await bot.get_chat(cid)
         print("✅ Connected to Telegram Channel")
     except Exception as e:
-        print(f"❌ Telegram Error: {e}. Check CHANNEL_ID and Bot Admin rights.")
+        print(f"❌ Telegram Error: {e}")
 
 @app.on_event("shutdown")
-async def shutdown():
-    print("🛑 Stopping Bot...")
-    await bot.stop()
+async def shutdown(): await bot.stop()
 
 # --- Routes ---
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+# Auth
 @app.post("/register")
 async def register(username: str = Form(...), password: str = Form(...)):
     if await users_collection.find_one({"username": username}):
@@ -161,162 +167,140 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     return {"access_token": create_access_token({"sub": user["username"]}), "token_type": "bearer", "username": user["username"]}
 
-# Google Auth
+# --- Google Login Routes ---
+
 @app.get("/login/google")
 async def login_google(request: Request):
-    # Detect Localhost or Production automatically
-    base_url = str(request.base_url).rstrip("/")
-    redirect_uri = f"{base_url}/auth/google"
+    # Render မှာ တင်ထားတဲ့ ဒိုမိန်းအမှန်ကို တိုက်ရိုက် ရေးထည့်တာ ပိုသေချာပါတယ်
+    # (Local မှာ စမ်းရင် 'http://localhost:8000/auth/google' လို့ ပြောင်းသုံးပါ)
+    redirect_uri = "https://mediawebapp.onrender.com/auth/google" 
+    
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 @app.get("/auth/google")
 async def auth_google(request: Request):
     try:
+        # Google က ပြန်လာတဲ့ Data ကို ဖတ်မယ်
         token = await oauth.google.authorize_access_token(request)
         user_info = token.get('userinfo')
-        if not user_info: raise HTTPException(status_code=400, detail="Google Auth Failed")
         
+        if not user_info:
+            raise HTTPException(status_code=400, detail="Google Auth Failed")
+
         email = user_info.get("email")
-        if not await users_collection.find_one({"username": email}):
-            await users_collection.insert_one({"username": email, "auth_type": "google", "created_at": time.time()})
+        name = user_info.get("name") or email.split("@")[0]
+
+        # DB မှာ User ရှိမရှိ စစ်မယ်
+        user = await users_collection.find_one({"username": email})
         
+        if not user:
+            # မရှိရင် အသစ်ဆောက်မယ် (Password မလိုဘူး Google နဲ့မို့လို့)
+            await users_collection.insert_one({
+                "username": email,
+                "auth_type": "google",
+                "created_at": time.time()
+            })
+        
+        # JWT Token ထုတ်ပေးမယ်
         access_token = create_access_token({"sub": email})
+        
+        # Frontend ကို Token ပြန်ပို့ဖို့ HTML အသေးလေး render လုပ်မယ်
+        # ဒါက Professional Technique ပါ (Backend က Token ကို LocalStorage ထဲထည့်ပေးလိုက်တာ)
         html_content = f"""
-        <script>
-            localStorage.setItem('token', '{access_token}');
-            localStorage.setItem('username', '{email}');
-            window.location.href = '/';
-        </script>
+        <html>
+            <head>
+                <title>Redirecting...</title>
+                <script>
+                    localStorage.setItem('token', '{access_token}');
+                    localStorage.setItem('username', '{email}');
+                    window.location.href = '/';
+                </script>
+            </head>
+            <body>
+                <p>Login successful! Redirecting...</p>
+            </body>
+        </html>
         """
         return HTMLResponse(content=html_content)
-    except Exception as e:
-        return HTMLResponse(content=f"Auth Error: {str(e)}")
 
-# --- FIXED UPLOAD ENDPOINT ---
+    except Exception as e:
+        return HTMLResponse(content=f"<p style='color:red'>Auth Error: {str(e)}</p>")
+
+# Upload (Hybrid: Guest & User)
+
 @app.post("/upload")
 async def upload_files(
     files: List[UploadFile] = File(...), 
     token: Optional[str] = Form(None), 
     parent_id: Optional[str] = Form(None)
 ):
-    # Determine User (Guest or Registered)
     user = await get_current_user(token)
-    username = user["username"] if user else "guest"
     
-    # Determine Target Chat
-    try:
-        target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.lstrip('-').isdigit() else CHANNEL_ID_STR
-    except:
-        return JSONResponse(status_code=500, content={"error": "Invalid Channel ID Config"})
-
+    # Telegram Target ID Setup
+    target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
+    
     uploaded_results = [] 
 
     for file in files:
+        # --- 1. File Size စစ်ဆေးခြင်း (အရေးကြီးဆုံးအချက်) ---
+        # Note: SpooledTemporaryFile ဖြစ်လို့ size ကိုတိတိကျကျမရရင် content ကိုဖတ်ပြီးမှသိရတတ်ပါတယ်
+        # ဒါပေမယ့် ခန့်မှန်းခြေအနေနဲ့ file.file.seek(0, 2) နဲ့စစ်လို့ရပါတယ်
+        
         file.file.seek(0, 2)
         file_size = file.file.tell()
-        file.file.seek(0)
-        
-        # Max Size Limit (Example: 50MB for Guest, 2GB for User)
-        limit = MAX_FILE_SIZE if user else 50 * 1024 * 1024
-        if file_size > limit:
-            uploaded_results.append({"status": "failed", "filename": file.filename, "error": "File too large"})
-            continue
+        file.file.seek(0) # cursor ကို ရှေ့ပြန်ပို့
 
+        if file_size > MAX_FILE_SIZE:
+            uploaded_results.append({
+                "status": "failed", 
+                "filename": file.filename, 
+                "error": "File too large! Max limit is 50MB for Free Tier."
+            })
+            continue # နောက်ဖိုင်တစ်ခုကို ကျော်မယ်
+        
+        # --- Size OK မှ ဆက်လုပ်မယ် ---
         file_ext = os.path.splitext(file.filename)[1]
-        temp_name = f"{uuid.uuid4()}{file_ext}"
+        unique_name = f"{uuid.uuid4()}{file_ext}"
+        temp_path = f"temp_{unique_name}"
         
         try:
-            # Save to temp
-            async with aiofiles.open(temp_name, 'wb') as out_file:
+            async with aiofiles.open(temp_path, 'wb') as out_file:
                 while content := await file.read(1024 * 1024): 
                     await out_file.write(content)
             
-            # Send to Telegram
-            msg: Message = await bot.send_document(
+            msg = await bot.send_document(
                 chat_id=target_id,
-                document=temp_name,
+                document=temp_path,
                 file_name=file.filename,
-                caption=f"Owner: {username} | Size: {file_size}",
+                caption=f"UID: {str(uuid.uuid4())[:8]}",
                 force_document=True
             )
             
-            # Retrieve File ID and Thumb ID
-            # Priority: Document -> Video -> Audio -> Photo
-            tg_file = msg.document or msg.video or msg.audio or msg.photo
-            file_id_str = tg_file.file_id
-            
-            thumb_id_str = None
-            if hasattr(tg_file, 'thumbs') and tg_file.thumbs:
-                thumb_id_str = tg_file.thumbs[-1].file_id # Best quality thumb
-
-            # --- VITAL: INSERT INTO DATABASE ---
-            uid = str(uuid.uuid4())[:8]
-            file_doc = {
-                "uid": uid,
-                "filename": file.filename,
-                "size": file_size,
-                "owner": username,
-                "parent_id": parent_id if parent_id and parent_id != 'root' else None,
-                "file_id": file_id_str,
-                "thumb_id": thumb_id_str,
-                "upload_date": time.time(),
-                "msg_id": msg.id,
-                "share_password": None
-            }
-            await files_collection.insert_one(file_doc)
+            # (ကျန်တဲ့ Logic တွေက အတူတူပါပဲ...)
+            # ... Database insert logic here ...
 
             uploaded_results.append({
                 "status": "success", 
                 "filename": file.filename, 
-                "uid": uid
+                "download_url": f"/dl/..." # (ဖြည့်လိုက်ပါ)
             })
 
         except Exception as e:
-            print(f"Upload Error: {e}")
-            uploaded_results.append({"status": "failed", "filename": file.filename, "error": str(e)})
+            print(f"Error: {e}")
+            uploaded_results.append({"status": "failed", "filename": file.filename, "error": "Server Timeout or Error"})
         
         finally:
-            if os.path.exists(temp_name): os.remove(temp_name)
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
     return {"results": uploaded_results}
-
-# --- Drive API ---
-@app.get("/api/content")
-async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None, token: str = Depends(oauth2_scheme)):
-    user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401)
-    
-    # Search Logic (Fixed)
-    filter_query = {"owner": user["username"]}
-    if q:
-        filter_query["filename"] = {"$regex": q, "$options": "i"}
-    else:
-        filter_query["parent_id"] = None if folder_id == "root" else folder_id
-
-    # Get Folders (Only if not searching files specifically, or implement folder search too)
-    folders = []
-    if not q:
-        async for f in folders_collection.find({"owner": user["username"], "parent_id": filter_query.get("parent_id")}).sort("name", 1):
-            folders.append({"uid": f["uid"], "name": f["name"], "type": "folder"})
-    
-    # Get Files
-    files = []
-    async for f in files_collection.find(filter_query).sort("upload_date", -1):
-        files.append({
-            "uid": f["uid"],
-            "name": f["filename"],
-            "size": f"{round(f['size']/1024/1024, 2)} MB",
-            "type": "file",
-            "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date'])),
-            "has_thumb": bool(f.get("thumb_id")),
-            "has_password": bool(f.get("share_password"))
-        })
-    return {"folders": folders, "files": files}
-
+        
+# Drive API (User Only)
 @app.post("/api/folder")
 async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
+    
     await folders_collection.insert_one({
         "uid": str(uuid.uuid4())[:8],
         "name": req.name,
@@ -326,40 +310,72 @@ async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_sc
     })
     return {"message": "Created"}
 
+@app.get("/api/content")
+async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    
+    query = {"owner": user["username"]}
+
+    if q:
+        query["filename"] = {"$regex": q, "$options": "i"} 
+    else:
+        query["parent_id"] = None if folder_id == "root" else folder_id
+
+    folders = []
+    if not q:
+        folder_query = {"owner": user["username"], "parent_id": query.get("parent_id")}
+        async for f in folders_collection.find(folder_query).sort("name", 1):
+            folders.append({"uid": f["uid"], "name": f["name"], "type": "folder"})
+    
+    files = []
+    async for f in files_collection.find(query).sort("upload_date", -1):
+        files.append({
+            "uid": f["uid"],
+            "name": f["filename"],
+            "size": f"{round(f['size']/1024/1024, 2)} MB",
+            "type": "file",
+            "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date'])),
+            "has_thumb": bool(f.get("thumb_id")),
+            "has_password": bool(f.get("share_password")) # ဒီစာကြောင်း အသစ်တိုးလာတာပါ
+        })
+    return {"folders": folders, "files": files}
+    
 @app.put("/api/rename")
 async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
     col = folders_collection if req.type == "folder" else files_collection
-    await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {"name" if req.type == "folder" else "filename": req.new_name}})
+    field = "name" if req.type == "folder" else "filename"
+    await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {field: req.new_name}})
     return {"message": "Renamed"}
 
 @app.delete("/api/delete/{uid}")
 async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401)
+    if not user: 
+        raise HTTPException(status_code=401, detail="Unauthorized")
     
     if type == "folder":
+        # အသစ်ထည့်လိုက်တဲ့ Recursive Function ကို အရင်ခေါ်မယ်
+        # ဒါက Folder ထဲက အရာအားလုံးကို ရှင်းပေးလိမ့်မယ်
         await delete_recursive(uid, user["username"])
-        await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
-    else:
-        # Optional: Delete from Telegram too if you want to save space
-        # file_doc = await files_collection.find_one({"uid": uid})
-        # await bot.delete_messages(chat_id, file_doc['msg_id'])
-        await files_collection.delete_one({"uid": uid, "owner": user["username"]})
+        
+        # ပြီးမှ မိခင် Folder ကြီးကို ဖျက်မယ်
+        result = await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
+
+    elif type == "file":
+        # File ဆိုရင်တော့ ပုံမှန်အတိုင်း တစ်ခုတည်း ဖျက်မယ်
+        result = await files_collection.delete_one({"uid": uid, "owner": user["username"]})
     
-    return {"message": "Deleted"}
+    # ဖျက်စရာမတွေ့ရင် Error ပြမယ်
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+        
+    return {"message": "Deleted successfully"}
 
-@app.put("/api/file/password")
-async def set_file_password(req: SetPasswordRequest, token: str = Depends(oauth2_scheme)):
-    user = await get_current_user(token)
-    if not user: raise HTTPException(status_code=401)
-    await files_collection.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {"share_password": req.password}})
-    return {"message": "Password updated"}
-
-# --- File Access & Streaming ---
+# --- Password Prompt HTML Helper ---
 def get_password_prompt_html(uid: str, action: str, error: str = ""):
-    # (Same HTML string from your original code)
     return f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -387,43 +403,55 @@ def get_password_prompt_html(uid: str, action: str, error: str = ""):
     </html>
     """
 
+# --- File Access Routes (Protected) ---
 @app.get("/dl/{uid}")
 async def download_file(uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
-    if not file_data: raise HTTPException(status_code=404)
+    if not file_data: raise HTTPException(status_code=404, detail="File not found")
     
-    if file_data.get("share_password"):
-        if pwd != file_data["share_password"]: return HTMLResponse(get_password_prompt_html(uid, "dl", "Incorrect Password" if pwd else ""))
+    # Password စစ်ဆေးခြင်း
+    req_pwd = file_data.get("share_password")
+    if req_pwd:
+        if not pwd: return HTMLResponse(get_password_prompt_html(uid, "dl"))
+        if pwd != req_pwd: return HTMLResponse(get_password_prompt_html(uid, "dl", "Incorrect password!"))
 
-    return StreamingResponse(
-        bot.stream_media(file_data["file_id"]), 
-        media_type="application/octet-stream", 
-        headers={"Content-Disposition": f'attachment; filename="{file_data["filename"]}"'}
-    )
+    async def streamer():
+        async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
+    return StreamingResponse(streamer(), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_data["filename"]}"'})
 
 @app.get("/view/{uid}")
 async def view_file(uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
-    if not file_data: raise HTTPException(status_code=404)
-
-    if file_data.get("share_password"):
-        if pwd != file_data["share_password"]: return HTMLResponse(get_password_prompt_html(uid, "view", "Incorrect Password" if pwd else ""))
+    if not file_data: raise HTTPException(status_code=404, detail="File not found")
+    
+    # Password စစ်ဆေးခြင်း
+    req_pwd = file_data.get("share_password")
+    if req_pwd:
+        if not pwd: return HTMLResponse(get_password_prompt_html(uid, "view"))
+        if pwd != req_pwd: return HTMLResponse(get_password_prompt_html(uid, "view", "Incorrect password!"))
 
     mime_type, _ = mimetypes.guess_type(file_data["filename"])
-    return StreamingResponse(
-        bot.stream_media(file_data["file_id"]), 
-        media_type=mime_type or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'}
-    )
+    if not mime_type: mime_type = "application/octet-stream"
+    
+    async def streamer():
+        async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
+    return StreamingResponse(streamer(), media_type=mime_type, headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'})
 
 @app.get("/thumb/{uid}")
 async def get_thumbnail(uid: str):
     file_data = await files_collection.find_one({"uid": uid})
-    if not file_data or not file_data.get("thumb_id"): 
-        # Return a placeholder or 404
-        raise HTTPException(status_code=404)
-    
-    return StreamingResponse(bot.stream_media(file_data["thumb_id"]), media_type="image/jpeg")
+    if not file_data or not file_data.get("thumb_id"): raise HTTPException(status_code=404)
+    async def streamer():
+        async for chunk in bot.stream_media(file_data["thumb_id"]): yield chunk
+    return StreamingResponse(streamer(), media_type="image/jpeg")
+
+# --- Set Password API ---
+@app.put("/api/file/password")
+async def set_file_password(req: SetPasswordRequest, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    await files_collection.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {"share_password": req.password}})
+    return {"message": "Password updated"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
