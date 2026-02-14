@@ -1,7 +1,6 @@
 import os
 import time
 import uuid
-import glob
 import uvicorn
 import aiofiles
 import mimetypes
@@ -10,7 +9,6 @@ from datetime import datetime, timedelta
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from starlette.middleware.sessions import SessionMiddleware
-from typing import List 
 
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -32,7 +30,6 @@ MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 # --- Setup ---
 app = FastAPI()
@@ -120,23 +117,9 @@ async def delete_recursive(folder_uid: str, owner: str):
 # --- Startup ---
 @app.on_event("startup")
 async def startup():
-    # 1. Bot ကို စ run မယ်
     await bot.start()
-    
-    # 2. အရင်ကျန်ခဲ့တဲ့ အမှိုက်ဖိုင် (Temp files) တွေကို ရှင်းမယ်
     try:
-        files = glob.glob('temp_*')
-        for f in files:
-            try:
-                os.remove(f)
-                print(f"Cleaned up cleanup file: {f}")
-            except Exception as e:
-                print(f"Error deleting {f}: {e}")
-    except Exception as e:
-        print(f"Cleanup Error: {e}")
-
-    # 3. Channel ထဲဝင်လို့ရမရ စစ်မယ်
-    try:
+        # Resolve Channel ID
         cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
         await bot.get_chat(cid)
         print("✅ Connected to Telegram Channel")
@@ -227,74 +210,48 @@ async def auth_google(request: Request):
         return HTMLResponse(content=f"<p style='color:red'>Auth Error: {str(e)}</p>")
 
 # Upload (Hybrid: Guest & User)
-
 @app.post("/upload")
-async def upload_files(
-    files: List[UploadFile] = File(...), 
-    token: Optional[str] = Form(None), 
-    parent_id: Optional[str] = Form(None)
-):
+async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
     user = await get_current_user(token)
     
-    # Telegram Target ID Setup
+    # Telegram Upload
     target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
+    file_uid = str(uuid.uuid4())[:8]
+    file_loc = f"temp_{file.filename}"
     
-    uploaded_results = [] 
+    # aiofiles ဖြင့် သိမ်းခြင်း (Non-blocking)
+    async with aiofiles.open(file_loc, "wb") as f:
+        while content := await file.read(1024 * 1024):
+            await f.write(content)
+    
+    try:
+        msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
+        if os.path.exists(file_loc): os.remove(file_loc)
 
-    for file in files:
-        # --- 1. File Size စစ်ဆေးခြင်း (အရေးကြီးဆုံးအချက်) ---
-        # Note: SpooledTemporaryFile ဖြစ်လို့ size ကိုတိတိကျကျမရရင် content ကိုဖတ်ပြီးမှသိရတတ်ပါတယ်
-        # ဒါပေမယ့် ခန့်မှန်းခြေအနေနဲ့ file.file.seek(0, 2) နဲ့စစ်လို့ရပါတယ်
-        
-        file.file.seek(0, 2)
-        file_size = file.file.tell()
-        file.file.seek(0) # cursor ကို ရှေ့ပြန်ပို့
+        # Thumbnail ရှိ/မရှိ စစ်ဆေးပြီး ရှိရင် ယူမယ်
+        thumb_id = None
+        if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
+            thumb_id = msg.document.thumbs[0].file_id
 
-        if file_size > MAX_FILE_SIZE:
-            uploaded_results.append({
-                "status": "failed", 
-                "filename": file.filename, 
-                "error": "File too large! Max limit is 50MB for Free Tier."
-            })
-            continue # နောက်ဖိုင်တစ်ခုကို ကျော်မယ်
+        file_data = {
+            "uid": file_uid,
+            "file_id": msg.document.file_id,
+            "filename": file.filename,
+            "size": msg.document.file_size,
+            "upload_date": time.time(),
+            "owner": user["username"] if user else None,
+            "parent_id": parent_id if (user and parent_id != "root") else None,
+            "thumb_id": thumb_id # Thumbnail ID ကို Database မှာ သိမ်းမယ်
+        }
+        await files_collection.insert_one(file_data)
         
-        # --- Size OK မှ ဆက်လုပ်မယ် ---
-        file_ext = os.path.splitext(file.filename)[1]
-        unique_name = f"{uuid.uuid4()}{file_ext}"
-        temp_path = f"temp_{unique_name}"
-        
-        try:
-            async with aiofiles.open(temp_path, 'wb') as out_file:
-                while content := await file.read(1024 * 1024): 
-                    await out_file.write(content)
-            
-            msg = await bot.send_document(
-                chat_id=target_id,
-                document=temp_path,
-                file_name=file.filename,
-                caption=f"UID: {str(uuid.uuid4())[:8]}",
-                force_document=True
-            )
-            
-            # (ကျန်တဲ့ Logic တွေက အတူတူပါပဲ...)
-            # ... Database insert logic here ...
+        return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
 
-            uploaded_results.append({
-                "status": "success", 
-                "filename": file.filename, 
-                "download_url": f"/dl/..." # (ဖြည့်လိုက်ပါ)
-            })
+    except Exception as e:
+        # ဒီ except block ပျောက်သွားလို့ Error တက်တာပါ
+        if os.path.exists(file_loc): os.remove(file_loc)
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
-        except Exception as e:
-            print(f"Error: {e}")
-            uploaded_results.append({"status": "failed", "filename": file.filename, "error": "Server Timeout or Error"})
-        
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-
-    return {"results": uploaded_results}
-        
 # Drive API (User Only)
 @app.post("/api/folder")
 async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_scheme)):
