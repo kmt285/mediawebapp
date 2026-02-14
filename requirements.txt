@@ -7,8 +7,7 @@ motor
 jinja2
 aiofiles
 python-jose[cryptography]
-passlib==1.7.4
-bcrypt==3.2.0
+passlib[bcrypt]
 authlib
 itsdangerous
 httpx
