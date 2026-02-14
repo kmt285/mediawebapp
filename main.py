@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from starlette.middleware.sessions import SessionMiddleware
+from typing import List 
 
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
@@ -210,50 +211,64 @@ async def auth_google(request: Request):
         return HTMLResponse(content=f"<p style='color:red'>Auth Error: {str(e)}</p>")
 
 # Upload (Hybrid: Guest & User)
+
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
+async def upload_files(
+    files: List[UploadFile] = File(...),  # <--- 'file' အစား 'files' (List) ဖြစ်သွားပါပြီ
+    token: Optional[str] = Form(None), 
+    parent_id: Optional[str] = Form(None)
+):
     user = await get_current_user(token)
     
-    # Telegram Target ID သတ်မှတ်ခြင်း
+    # Telegram Target ID
     target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
-    file_uid = str(uuid.uuid4())[:8]
     
-    try:
-        # --- ပြောင်းလဲလိုက်သော အပိုင်း (Start) ---
-        # ယခင်က aiofiles နဲ့ Disk ပေါ်ရေးတဲ့ အပိုင်းကို ဖျက်လိုက်ပါပြီ။
-        # file.file ကိုသုံးပြီး Telegram ကို တိုက်ရိုက် Stream ပေးလိုက်ပါတယ်။
+    uploaded_results = [] # တင်ပြီးသမျှ Result တွေကို သိမ်းထားဖို့
+
+    # ဖိုင်တစ်ခုချင်းစီကို Loop ပတ်ပြီး အလုပ်လုပ်မယ်
+    for file in files:
+        file_uid = str(uuid.uuid4())[:8]
         
-        msg = await bot.send_document(
-            chat_id=target_id,
-            document=file.file,        # <--- ဒီနေရာက အဓိကပါ (Direct Stream)
-            file_name=file.filename,   # <--- ဖိုင်နာမည် မှန်ကန်အောင် ထည့်ပေးရပါမယ်
-            caption=f"UID: {file_uid}",
-            force_document=True
-        )
-        # --- ပြောင်းလဲလိုက်သော အပိုင်း (End) ---
+        try:
+            # Telegram ကို Direct Stream (Memory to Telegram)
+            msg = await bot.send_document(
+                chat_id=target_id,
+                document=file.file,
+                file_name=file.filename,
+                caption=f"UID: {file_uid}",
+                force_document=True
+            )
 
-        # Thumbnail ရှိ/မရှိ စစ်ဆေးပြီး ရှိရင် ယူမယ်
-        thumb_id = None
-        if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
-            thumb_id = msg.document.thumbs[0].file_id
+            # Thumbnail Check
+            thumb_id = None
+            if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
+                thumb_id = msg.document.thumbs[0].file_id
 
-        file_data = {
-            "uid": file_uid,
-            "file_id": msg.document.file_id,
-            "filename": file.filename,
-            "size": msg.document.file_size,
-            "upload_date": time.time(),
-            "owner": user["username"] if user else None,
-            "parent_id": parent_id if (user and parent_id != "root") else None,
-            "thumb_id": thumb_id
-        }
-        await files_collection.insert_one(file_data)
-        
-        return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
+            file_data = {
+                "uid": file_uid,
+                "file_id": msg.document.file_id,
+                "filename": file.filename,
+                "size": msg.document.file_size,
+                "upload_date": time.time(),
+                "owner": user["username"] if user else None,
+                "parent_id": parent_id if (user and parent_id != "root") else None,
+                "thumb_id": thumb_id
+            }
+            await files_collection.insert_one(file_data)
+            
+            # Result စာရင်းထဲ ထည့်မယ်
+            uploaded_results.append({
+                "status": "success", 
+                "filename": file.filename, 
+                "download_url": f"/dl/{file_uid}"
+            })
 
-    except Exception as e:
-        print(f"Upload Error: {e}") # Error ကို Console မှာ ကြည့်လို့ရအောင် ထည့်ထားပါတယ်
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        except Exception as e:
+            print(f"Error uploading {file.filename}: {e}")
+            uploaded_results.append({"status": "failed", "filename": file.filename, "error": str(e)})
+
+    # အားလုံးပြီးရင် Result ပြန်ပို့မယ်
+    return {"results": uploaded_results}
         
 # Drive API (User Only)
 @app.post("/api/folder")
