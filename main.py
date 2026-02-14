@@ -101,6 +101,15 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
         return await users_collection.find_one({"username": username})
     except JWTError: return None
 
+async def get_current_admin(token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    
+    # Database ထဲမှာ role='admin' ဖြစ်မှ ခွင့်ပြုမည်
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin privileges required")
+    return user
+
 # --- Helper Functions ---
 # (ရှိပြီးသား function တွေရဲ့ အောက်မှာ ဒီ function ကို ထပ်ထည့်ပါ)
 
@@ -443,6 +452,58 @@ async def set_file_password(req: SetPasswordRequest, token: str = Depends(oauth2
     if not user: raise HTTPException(status_code=401)
     await files_collection.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {"share_password": req.password}})
     return {"message": "Password updated"}
+
+# --- ADMIN ROUTES ---
+
+@app.get("/api/admin/stats")
+async def get_admin_stats(admin: dict = Depends(get_current_admin)):
+    # 1. Total Files & Users
+    total_files = await files_collection.count_documents({})
+    total_users = await users_collection.count_documents({})
+    
+    # 2. Total Storage Used (Aggregation)
+    pipeline = [{"$group": {"_id": None, "total_size": {"$sum": "$size"}}}]
+    cursor = files_collection.aggregate(pipeline)
+    result = await cursor.to_list(length=1)
+    total_bytes = result[0]["total_size"] if result else 0
+    
+    # 3. Recent Uploads (Last 5)
+    recent_files = []
+    async for f in files_collection.find().sort("upload_date", -1).limit(5):
+        recent_files.append({
+            "name": f["filename"],
+            "owner": f.get("owner", "Guest"),
+            "size": f"{round(f['size']/(1024*1024), 2)} MB",
+            "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date']))
+        })
+
+    return {
+        "total_users": total_users,
+        "total_files": total_files,
+        "total_storage": f"{round(total_bytes/(1024*1024*1024), 2)} GB",
+        "recent_files": recent_files
+    }
+
+@app.get("/api/admin/users")
+async def get_all_users(admin: dict = Depends(get_current_admin)):
+    users = []
+    async for u in users_collection.find():
+        users.append({
+            "username": u["username"],
+            "role": u.get("role", "user"),
+            "joined": time.strftime('%Y-%m-%d', time.localtime(u.get("created_at", time.time())))
+        })
+    return users
+
+@app.delete("/api/admin/ban/{username}")
+async def ban_user(username: str, admin: dict = Depends(get_current_admin)):
+    if username == admin["username"]:
+        raise HTTPException(status_code=400, detail="Cannot ban yourself")
+    
+    # User ကိုဖျက်မည် (သို့မဟုတ် field တစ်ခုထည့်ပြီး lock လုပ်နိုင်သည်)
+    await users_collection.delete_one({"username": username})
+    # User ပိုင်တဲ့ ဖိုင်တွေကိုပါ ဖျက်ချင်ရင် ဒီမှာ ထပ်ရေးနိုင်ပါတယ်
+    return {"message": f"User {username} has been banned/deleted"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
