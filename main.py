@@ -214,35 +214,48 @@ async def auth_google(request: Request):
 
 @app.post("/upload")
 async def upload_files(
-    files: List[UploadFile] = File(...),  # <--- 'file' အစား 'files' (List) ဖြစ်သွားပါပြီ
+    files: List[UploadFile] = File(...), 
     token: Optional[str] = Form(None), 
     parent_id: Optional[str] = Form(None)
 ):
     user = await get_current_user(token)
     
-    # Telegram Target ID
+    # Telegram Target ID Setup
     target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
     
-    uploaded_results = [] # တင်ပြီးသမျှ Result တွေကို သိမ်းထားဖို့
+    uploaded_results = [] 
 
-    # ဖိုင်တစ်ခုချင်းစီကို Loop ပတ်ပြီး အလုပ်လုပ်မယ်
     for file in files:
-        file_uid = str(uuid.uuid4())[:8]
+        # 1. နာမည်တူမဖြစ်အောင် unique name ပေးမယ်
+        file_ext = os.path.splitext(file.filename)[1]
+        unique_name = f"{uuid.uuid4()}{file_ext}"
+        temp_path = f"temp_{unique_name}"
         
         try:
-            # Telegram ကို Direct Stream (Memory to Telegram)
+            # 2. Server ထဲမှာ အရင် Save လိုက်မယ် (Chunk by chunk)
+            # ဒါမှ Memory ပြည့်ပြီး Stuck မဖြစ်မှာပါ
+            async with aiofiles.open(temp_path, 'wb') as out_file:
+                while content := await file.read(1024 * 1024):  # 1MB per chunk
+                    await out_file.write(content)
+            
+            # 3. Disk ပေါ်ရောက်သွားပြီဆိုမှ Telegram ကို path ပေးပြီး Upload မယ်
+            # Pyrogram က path ပေးလိုက်ရင် ပိုမြန်ပြီး stable ဖြစ်ပါတယ်
             msg = await bot.send_document(
                 chat_id=target_id,
-                document=file.file,
+                document=temp_path, # <--- Path ကိုညွှန်လိုက်တာပါ
                 file_name=file.filename,
-                caption=f"UID: {file_uid}",
-                force_document=True
+                caption=f"UID: {str(uuid.uuid4())[:8]}",
+                force_document=True,
+                progress=None # Stuck ဖြစ်တတ်လို့ progress ခဏပိတ်ထားနိုင်ပါတယ်
             )
 
             # Thumbnail Check
             thumb_id = None
             if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
                 thumb_id = msg.document.thumbs[0].file_id
+
+            # UID ကို caption ကနေပြန်ယူမလား၊ အသစ်ဆောက်မလား (ဒီမှာတော့ အသစ်ပဲယူလိုက်မယ်)
+            file_uid = str(uuid.uuid4())[:8]
 
             file_data = {
                 "uid": file_uid,
@@ -256,7 +269,6 @@ async def upload_files(
             }
             await files_collection.insert_one(file_data)
             
-            # Result စာရင်းထဲ ထည့်မယ်
             uploaded_results.append({
                 "status": "success", 
                 "filename": file.filename, 
@@ -266,8 +278,12 @@ async def upload_files(
         except Exception as e:
             print(f"Error uploading {file.filename}: {e}")
             uploaded_results.append({"status": "failed", "filename": file.filename, "error": str(e)})
+        
+        finally:
+            # 4. ပြီးရင် Server ပေါ်က ယာယီဖိုင်ကို ပြန်ဖျက်မယ် (အရေးကြီးပါတယ်)
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
-    # အားလုံးပြီးရင် Result ပြန်ပို့မယ်
     return {"results": uploaded_results}
         
 # Drive API (User Only)
