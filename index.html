@@ -79,6 +79,12 @@
     </div>
 
     <div class="flex gap-3 shrink-0 ml-auto">
+        <button id="paste-btn" onclick="pasteItem()" class="hidden bg-purple-600 hover:bg-purple-700 border border-purple-500 text-white px-3 py-2 rounded flex items-center gap-2 transition animate-pulse">
+            <i class="fas fa-paste"></i> <span>Paste Here</span>
+        </button>
+        <button onclick="cancelPaste()" id="cancel-paste-btn" class="hidden bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded ml-2 transition" title="Cancel Move">
+            <i class="fas fa-times"></i>
+        </button>
         <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
             <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
         </button>
@@ -289,6 +295,54 @@
         }
         function closeConfirm() { document.getElementById('custom-confirm').classList.add('hidden'); }
 
+        // --- MOVE / CUT-PASTE LOGIC ---
+let clipboard = null; // { uid, type, name }
+
+function cutItem(uid, name, type) {
+    clipboard = { uid, name, type };
+    
+    // UI Updates
+    document.getElementById('paste-btn').classList.remove('hidden');
+    document.getElementById('cancel-paste-btn').classList.remove('hidden');
+    document.getElementById('paste-btn').querySelector('span').innerText = `Paste "${name}" Here`;
+    
+    showToast(`Cut "${name}". Go to destination & Paste.`);
+}
+
+function cancelPaste() {
+    clipboard = null;
+    document.getElementById('paste-btn').classList.add('hidden');
+    document.getElementById('cancel-paste-btn').classList.add('hidden');
+    showToast("Move Cancelled");
+}
+
+async function pasteItem() {
+    if (!clipboard) return;
+    
+    // API Call
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/move', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+            uid: clipboard.uid,
+            type: clipboard.type,
+            target_parent_id: currentFolder
+        })
+    });
+
+    if (res.ok) {
+        showToast(`Moved "${clipboard.name}" successfully!`);
+        clipboard = null; // Clear clipboard
+        document.getElementById('paste-btn').classList.add('hidden');
+        document.getElementById('cancel-paste-btn').classList.add('hidden');
+        loadDriveContent(); // Refresh UI
+    } else {
+        const err = await res.json();
+        showToast(err.detail || "Move Failed", "error");
+    }
+}
+
 
         // --- CORE LOGIC ---
         let currentFolder = 'root';
@@ -419,13 +473,13 @@
                             <p class="text-sm text-center text-gray-200 truncate w-full px-2 select-none">${f.name}</p>
                             
                             <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
+                                <button onclick="event.stopPropagation(); cutItem('${f.uid}', '${f.name}', 'folder')" class="bg-gray-900 text-purple-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Cut / Move"><i class="fas fa-scissors text-xs"></i></button>
                                 <button onclick="event.stopPropagation(); renameItem('${f.uid}', '${f.name}', 'folder')" class="bg-gray-900 text-blue-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Rename"><i class="fas fa-pen text-xs"></i></button>
                                 <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Delete"><i class="fas fa-times text-xs"></i></button>
                             </div>
                         </div>`;
                 });
-                // Files (Double Click ဖြင့် ဖွင့်ရန် ပြင်ဆင်ထားသည်)
-                // Files (With Password Lock Button)
+            
                 // Files (With Rename Button added)
                 data.files.forEach(f => {
                     let displayIcon = f.has_thumb 
@@ -447,6 +501,7 @@
                             </div>
                             
                             <div class="absolute top-1 right-1 hidden group-hover:flex flex-wrap justify-end w-16 gap-1 z-10">
+                                <button onclick="event.stopPropagation(); cutItem('${f.uid}', '${f.name}', 'file')" class="bg-gray-900 text-purple-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Cut / Move"><i class="fas fa-scissors text-xs"></i></button>
                                 <button onclick="event.stopPropagation(); renameItem('${f.uid}', '${f.name}', 'file')" class="bg-gray-900 text-blue-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Rename"><i class="fas fa-pen text-xs"></i></button>
                                 <button onclick="event.stopPropagation(); openPasswordModal('${f.uid}', ${f.has_password})" class="bg-gray-900 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Set Password">${lockIcon}</button>
                                 <button onclick="event.stopPropagation(); copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
