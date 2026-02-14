@@ -214,19 +214,23 @@ async def auth_google(request: Request):
 async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
     user = await get_current_user(token)
     
-    # Telegram Upload
+    # Telegram Target ID သတ်မှတ်ခြင်း
     target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
     file_uid = str(uuid.uuid4())[:8]
-    file_loc = f"temp_{file.filename}"
-    
-    # aiofiles ဖြင့် သိမ်းခြင်း (Non-blocking)
-    async with aiofiles.open(file_loc, "wb") as f:
-        while content := await file.read(1024 * 1024):
-            await f.write(content)
     
     try:
-        msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
-        if os.path.exists(file_loc): os.remove(file_loc)
+        # --- ပြောင်းလဲလိုက်သော အပိုင်း (Start) ---
+        # ယခင်က aiofiles နဲ့ Disk ပေါ်ရေးတဲ့ အပိုင်းကို ဖျက်လိုက်ပါပြီ။
+        # file.file ကိုသုံးပြီး Telegram ကို တိုက်ရိုက် Stream ပေးလိုက်ပါတယ်။
+        
+        msg = await bot.send_document(
+            chat_id=target_id,
+            document=file.file,        # <--- ဒီနေရာက အဓိကပါ (Direct Stream)
+            file_name=file.filename,   # <--- ဖိုင်နာမည် မှန်ကန်အောင် ထည့်ပေးရပါမယ်
+            caption=f"UID: {file_uid}",
+            force_document=True
+        )
+        # --- ပြောင်းလဲလိုက်သော အပိုင်း (End) ---
 
         # Thumbnail ရှိ/မရှိ စစ်ဆေးပြီး ရှိရင် ယူမယ်
         thumb_id = None
@@ -241,17 +245,16 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
             "upload_date": time.time(),
             "owner": user["username"] if user else None,
             "parent_id": parent_id if (user and parent_id != "root") else None,
-            "thumb_id": thumb_id # Thumbnail ID ကို Database မှာ သိမ်းမယ်
+            "thumb_id": thumb_id
         }
         await files_collection.insert_one(file_data)
         
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
 
     except Exception as e:
-        # ဒီ except block ပျောက်သွားလို့ Error တက်တာပါ
-        if os.path.exists(file_loc): os.remove(file_loc)
+        print(f"Upload Error: {e}") # Error ကို Console မှာ ကြည့်လို့ရအောင် ထည့်ထားပါတယ်
         return JSONResponse(status_code=500, content={"error": str(e)})
-
+        
 # Drive API (User Only)
 @app.post("/api/folder")
 async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_scheme)):
