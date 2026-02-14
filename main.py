@@ -96,6 +96,24 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
         return await users_collection.find_one({"username": username})
     except JWTError: return None
 
+# --- Helper Functions ---
+# (ရှိပြီးသား function တွေရဲ့ အောက်မှာ ဒီ function ကို ထပ်ထည့်ပါ)
+
+async def delete_recursive(folder_uid: str, owner: str):
+    """
+    Folder တစ်ခုအောက်ရှိ File များနှင့် Sub-folder များကို အဆင့်ဆင့် လိုက်ဖျက်ပေးမည့် Function
+    """
+    # 1. ဒီ Folder အောက်မှာရှိတဲ့ File တွေကို အရင်ဖျက်မယ်
+    await files_collection.delete_many({"parent_id": folder_uid, "owner": owner})
+
+    # 2. ဒီ Folder အောက်မှာရှိတဲ့ Sub-folder တွေကို ရှာမယ်
+    async for sub_folder in folders_collection.find({"parent_id": folder_uid, "owner": owner}):
+        # 3. တွေ့တဲ့ Sub-folder တစ်ခုချင်းစီအတွက် ဒီ Function ကိုပြန်ခေါ်မယ် (Recursion)
+        await delete_recursive(sub_folder["uid"], owner)
+
+    # 4. အထဲကအရာတွေ ရှင်းသွားပြီဆိုမှ Sub-folder တွေကို ဖျက်မယ်
+    await folders_collection.delete_many({"parent_id": folder_uid, "owner": owner})
+
 # --- Startup ---
 @app.on_event("startup")
 async def startup():
@@ -296,12 +314,18 @@ async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     if type == "folder":
-        # Folder ကို Database ထဲကနေ ဖျက်မယ်
+        # အသစ်ထည့်လိုက်တဲ့ Recursive Function ကို အရင်ခေါ်မယ်
+        # ဒါက Folder ထဲက အရာအားလုံးကို ရှင်းပေးလိမ့်မယ်
+        await delete_recursive(uid, user["username"])
+        
+        # ပြီးမှ မိခင် Folder ကြီးကို ဖျက်မယ်
         result = await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
+
     elif type == "file":
-        # File ကို Database ထဲကနေ ဖျက်မယ်
+        # File ဆိုရင်တော့ ပုံမှန်အတိုင်း တစ်ခုတည်း ဖျက်မယ်
         result = await files_collection.delete_one({"uid": uid, "owner": user["username"]})
     
+    # ဖျက်စရာမတွေ့ရင် Error ပြမယ်
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
         
