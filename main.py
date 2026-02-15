@@ -162,7 +162,6 @@ def get_target_chat_id(chat_id_str: str):
     return chat_id_str
 
 #startup
-# startup function အဟောင်းနေရာမှာ ဒါကို အစားထိုးပါ
 @app.on_event("startup")
 async def startup():
     print("🚀 Starting up...")
@@ -171,7 +170,7 @@ async def startup():
     if not bot.is_connected:
         await bot.start()
 
-    # ID ကို String အနေနဲ့ အရင်ယူထားမယ်
+    # Env ထဲက ID ကို ယူမယ်
     target_chat = CHANNEL_ID_STR.strip().replace('"', '').replace("'", "")
     
     # Private Channel ID (-100...) ဖြစ်ခဲ့ရင် Integer ပြောင်းမယ်
@@ -181,34 +180,23 @@ async def startup():
             chat_id_int = int(target_chat)
         except:
             pass
-            
+
+    print(f"🔍 Connecting to Channel ID: {target_chat}")
+
     try:
-        # အရင်ဆုံး Integer ID နဲ့ စမ်းချိတ်မယ်
+        # ID နဲ့ တိုက်ရိုက်ချိတ်မယ်
         if chat_id_int:
-            print(f"🔄 Trying to connect with ID: {chat_id_int}")
             chat = await bot.get_chat(chat_id_int)
         else:
-            # မရရင် (သို့) ID ပုံစံမဟုတ်ရင် မူရင်းအတိုင်း စမ်းမယ်
-            print(f"🔄 Trying to connect with raw string: {target_chat}")
             chat = await bot.get_chat(target_chat)
             
-        print(f"✅ Connected to Channel: {chat.title} (ID: {chat.id})")
+        print(f"✅ Successfully Connected to: {chat.title} (ID: {chat.id})")
         
     except Exception as e:
-        print(f"⚠️ Direct connection failed: {e}")
-        print("🔍 Scanning dialogs to find the channel...")
-        
-        # Session String သုံးထားရင် Bot ရောက်နေတဲ့နေရာတွေကို ရှာလို့ရတယ်
-        found = False
-        async for dialog in bot.get_dialogs():
-            # ID တူမတူ စစ်မယ် (String အနေနဲ့ရော Integer အနေနဲ့ရော)
-            if str(dialog.chat.id) == str(target_chat) or str(dialog.chat.id) == f"-100{target_chat}":
-                print(f"✅ Found Channel in Dialogs: {dialog.chat.title} (ID: {dialog.chat.id})")
-                found = True
-                break
-        
-        if not found:
-            print("❌ Critical Error: Bot cannot see the channel. Please add the Bot to the channel and make it Admin.")
+        print(f"❌ CONNECTION ERROR: {e}")
+        print("⚠️ IMPORTANT FIX: Please regenerate your SESSION STRING after sending a message to the channel.")
+        # Error တက်လဲ Server ကို မပိတ်ဘဲ Run ခိုင်းထားမယ် (ဒါမှ Web ပေါ်မှာ ပြင်လို့ရမှာ)
+        pass
         
 @app.on_event("shutdown")
 async def shutdown(): await bot.stop()
