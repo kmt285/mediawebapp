@@ -30,6 +30,7 @@ MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
+MAX_FILE_SIZE = 50 * 1024 * 1024
 
 # --- Setup ---
 app = FastAPI()
@@ -228,21 +229,38 @@ async def auth_google(request: Request):
 async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
     user = await get_current_user(token)
     
-    # Telegram Upload
+    # Telegram Upload Setup
     target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
-    # aiofiles ဖြင့် သိမ်းခြင်း (Non-blocking)
-    async with aiofiles.open(file_loc, "wb") as f:
-        while content := await file.read(1024 * 1024):
-            await f.write(content)
+    # --- 50MB CHECK LOGIC START ---
+    total_size = 0
+    try:
+        async with aiofiles.open(file_loc, "wb") as f:
+            while content := await file.read(1024 * 1024): # 1MB chunks
+                total_size += len(content)
+                
+                # 50MB ကျော်သွားရင် ချက်ချင်းရပ်မယ်
+                if total_size > MAX_FILE_SIZE:
+                    raise HTTPException(status_code=413, detail="File too large. Maximum limit is 50MB.")
+                
+                await f.write(content)
+    except HTTPException as e:
+        # Error တက်ရင် တဝက်တပျက်ဖြစ်နေတဲ့ file ကို ဖျက်မယ်
+        if os.path.exists(file_loc): os.remove(file_loc)
+        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
+    except Exception as e:
+        if os.path.exists(file_loc): os.remove(file_loc)
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    # --- 50MB CHECK LOGIC END ---
     
     try:
+        # Telegram ကို ပို့တဲ့အပိုင်း (မူရင်းအတိုင်း)
         msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
         if os.path.exists(file_loc): os.remove(file_loc)
 
-        # Thumbnail ရှိ/မရှိ စစ်ဆေးပြီး ရှိရင် ယူမယ်
+        # Thumbnail ယူခြင်း
         thumb_id = None
         if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
             thumb_id = msg.document.thumbs[0].file_id
@@ -255,17 +273,16 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
             "upload_date": time.time(),
             "owner": user["username"] if user else None,
             "parent_id": parent_id if (user and parent_id != "root") else None,
-            "thumb_id": thumb_id # Thumbnail ID ကို Database မှာ သိမ်းမယ်
+            "thumb_id": thumb_id
         }
         await files_collection.insert_one(file_data)
         
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
 
     except Exception as e:
-        # ဒီ except block ပျောက်သွားလို့ Error တက်တာပါ
         if os.path.exists(file_loc): os.remove(file_loc)
         return JSONResponse(status_code=500, content={"error": str(e)})
-
+        
 # Drive API (User Only)
 @app.post("/api/folder")
 async def create_folder(req: CreateFolderRequest, token: str = Depends(oauth2_scheme)):
