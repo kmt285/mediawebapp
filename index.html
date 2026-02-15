@@ -602,7 +602,7 @@ async function pasteItem() {
             progressContainer.classList.remove('hidden');
             
             let successCount = 0;
-            showToast(`Starting processing for ${files.length} file(s)...`);
+            showToast(`Start uploading for ${files.length} file(s)...`);
 
             // Loop ပတ်ပြီး တင်မယ်
             for (let i = 0; i < files.length; i++) {
@@ -627,7 +627,7 @@ async function pasteItem() {
                 showToast(`"${successCount}" file(s) Uploaded! `, 'success');
                 loadDriveContent(); // UI Refresh
             } else {
-                showToast("No files were uploaded.", "error");
+                showToast(`File too large! Max allowed is ${MAX_MB}MB.`, 'error');
             }
         }
         // --- MULTIPLE UPLOAD LOGIC END ---
