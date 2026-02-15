@@ -89,7 +89,7 @@
         </button>
         <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
             <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
-            <input type="file" id="drive-file" class="hidden" onchange="driveUpload(this.files[0])">
+            <input type="file" id="drive-file" class="hidden" multiple onchange="driveUpload(this.files)">
         </label>
     </div>
 
@@ -545,37 +545,84 @@ async function pasteItem() {
             });
         }
 
-        async function driveUpload(file) {
-            if(!file) return;
+        // --- MULTIPLE UPLOAD LOGIC START ---
 
-            // --- SIZE CHECK START ---
-            if (file.size > MAX_BYTES) {
-                showToast(`File too large! Max allowed is ${MAX_MB}MB.`, 'error');
-                // Input value ကို reset လုပ်ပေးရင် ပိုကောင်းပါတယ်
-                document.getElementById('drive-file').value = ''; 
-                return;
-            }
-            // --- SIZE CHECK END ---
+        // Helper Function: ဖိုင်တစ်ခုချင်းစီကို Promise နဲ့ Upload တင်ပေးမယ့်ကောင်
+        function uploadSingleFile(file) {
+            return new Promise((resolve, reject) => {
+                // Size Check (50MB) - အရင်ထည့်ခဲ့တဲ့ Code ပါ
+                const MAX_MB = 50; 
+                const MAX_BYTES = MAX_MB * 1024 * 1024;
 
-            document.getElementById('drive-progress').classList.remove('hidden');
-            const bar = document.getElementById('drive-bar');
-            
-            const fd = new FormData();
-            fd.append('file', file);
-            fd.append('token', localStorage.getItem('token'));
-            fd.append('parent_id', currentFolder);
-            
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/upload', true);
-            xhr.upload.onprogress = (e) => { bar.style.width = ((e.loaded/e.total)*100) + "%"; };
-            xhr.onload = () => {
-                document.getElementById('drive-progress').classList.add('hidden');
-                bar.style.width = "0%";
-                showToast("Upload Successful");
-                loadDriveContent();
-            };
-            xhr.send(fd);
+                if (file.size > MAX_BYTES) {
+                    showToast(`File too large! Max allowed is ${MAX_MB}MB.`, 'error');
+                    resolve(); // Error မတက်စေဘဲ ကျော်သွားမယ်
+                    return;
+                }
+
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('token', localStorage.getItem('token'));
+                fd.append('parent_id', currentFolder);
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/upload', true);
+
+                // Progress Bar ကို တစ်ဖိုင်ချင်းစီအတွက် ပြမယ်
+                xhr.upload.onprogress = (e) => {
+                    const p = (e.loaded / e.total) * 100;
+                    document.getElementById('drive-bar').style.width = p + "%";
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        resolve(true); // Success
+                    } else {
+                        showToast(`Failed: ${file.name}`, 'error');
+                        resolve(false); // Failed but continue
+                    }
+                };
+
+                xhr.onerror = () => {
+                    showToast(`Network Error: ${file.name}`, 'error');
+                    resolve(false);
+                };
+
+                xhr.send(fd);
+            });
         }
+
+        // Main Function: ဖိုင်အများကြီးကို Loop ပတ်ပြီး တင်မယ့်ကောင်
+        async function driveUpload(files) {
+            if (!files || files.length === 0) return;
+
+            const progressContainer = document.getElementById('drive-progress');
+            const progressBar = document.getElementById('drive-bar');
+            
+            progressContainer.classList.remove('hidden');
+            
+            let successCount = 0;
+            showToast(`Starting upload for ${files.length} file(s)...`);
+
+            // တစ်ဖိုင်ပြီးမှ တစ်ဖိုင်တင်မယ် (Sequential Upload)
+            // ဒါမှ Server ဘက်မှာ Connection ပြိုင်ဝင်ပြီး Error တက်တာမျိုး မဖြစ်မှာ
+            for (let i = 0; i < files.length; i++) {
+                progressBar.style.width = "0%"; // Bar ကို reset ချ
+                await uploadSingleFile(files[i]); // Upload ပြီးတဲ့အထိ စောင့်မယ်
+                successCount++;
+            }
+
+            // အားလုံးပြီးသွားရင်
+            progressContainer.classList.add('hidden');
+            progressBar.style.width = "0%";
+            
+            // Input ကို ပြန်ရှင်းမယ် (နောက်တစ်ခါ ထပ်ရွေးလို့ရအောင်)
+            document.getElementById('drive-file').value = ''; 
+            
+            showToast(`Uploaded ${successCount} file(s) successfully!`, 'success');
+            loadDriveContent(); // UI Refresh
+        }
+        // --- MULTIPLE UPLOAD LOGIC END ---
 
         function deleteItem(uid, type) {
             openConfirm(async () => {
