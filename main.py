@@ -26,6 +26,7 @@ API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID_STR = os.environ.get("CHANNEL_ID") 
+CHANNEL_INVITE_LINK = os.environ.get("CHANNEL_INVITE_LINK")
 MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
@@ -159,15 +160,24 @@ async def startup():
     print("🚀 Starting up...")
     await bot.start()
     try:
-        # ID အမှန်ကို အပေါ်က function နဲ့ ယူမယ်
+        # နည်းလမ်း (၁) - Invite Link နဲ့ အရင်ဆုံး Channel ကို မိတ်ဆက်မယ်
+        if CHANNEL_INVITE_LINK:
+            print("🔗 Joining/Resolving via Invite Link...")
+            try:
+                # Invite Link သုံးပြီး Chat ကို ဆွဲယူမယ် (Join ပြီးသားဆိုရင်လည်း Info ရတယ်)
+                chat = await bot.get_chat(CHANNEL_INVITE_LINK)
+                print(f"✅ Resolved Channel: {chat.title} ID: {chat.id}")
+                # ဒီအဆင့်မှာ Bot က Channel ID နဲ့ Access Hash ကို Cache ထဲထည့်သွားပြီ
+            except Exception as e:
+                print(f"⚠️ Invite Link Error: {e}")
+
+        # ပြီးမှ ID နဲ့ ပြန်ချိတ်မယ်
         cid = get_target_chat_id(CHANNEL_ID_STR)
-        
-        # Channel ကို လှမ်းစစ်မယ် (ဒါမှ Bot က Cache ထဲမှတ်ထားမှာ)
-        chat_info = await bot.get_chat(cid)
-        print(f"✅ Connected to Channel: {chat_info.title} (ID: {chat_info.id})")
+        await bot.get_chat(cid)
+        print("✅ Telegram Channel Connected Successfully!")
         
     except Exception as e:
-        print(f"❌ Telegram Error (Check CHANNEL_ID): {e}")
+        print(f"❌ Telegram Connection Error: {e}")
 
 @app.on_event("shutdown")
 async def shutdown(): await bot.stop()
