@@ -26,7 +26,7 @@ API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID_STR = os.environ.get("CHANNEL_ID") 
-CHANNEL_INVITE_LINK = os.environ.get("CHANNEL_INVITE_LINK")
+BOT_SESSION = os.environ.get("BOT_SESSION")
 MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
@@ -62,7 +62,14 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # Telegram
-bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
+if BOT_SESSION:
+    # Session String ရှိရင် ဒါနဲ့ run မယ် (Stable ဖြစ်တယ်)
+    print("✅ Using Session String...")
+    bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, session_string=BOT_SESSION)
+else:
+    # မရှိရင် Token နဲ့ run မယ် (Private Channel ဆို Error တက်နိုင်တယ်)
+    print("⚠️ Using Bot Token (Not recommended for Private Channels)...")
+    bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
 
 # --- Models ---
 class CreateFolderRequest(BaseModel):
@@ -160,44 +167,20 @@ async def startup():
     print("🚀 Starting up...")
     await bot.start()
     
-    found_channel = False
-    target_id = None
-    
-    # Env ထဲက ID ကို ဂဏန်းပြောင်းယူမယ်
     try:
+        # ID ကို String ကနေ Integer ပြောင်းမယ်
         if CHANNEL_ID_STR.startswith("-100"):
-            target_id = int(CHANNEL_ID_STR)
+            cid = int(CHANNEL_ID_STR)
         else:
-            target_id = int(f"-100{CHANNEL_ID_STR}") if not CHANNEL_ID_STR.startswith("-") else int(CHANNEL_ID_STR)
-    except:
-        print("⚠️ ID format check needed")
-
-    print(f"🔍 Looking for Channel ID: {target_id}")
-
-    try:
-        # Bot ရောက်နေသမျှ Group/Channel အကုန်လုံးကို လိုက်စစ်မယ် (ဒါက အဓိက key ပါ)
-        async for dialog in bot.get_dialogs():
-            print(f"👀 Found Chat: {dialog.chat.title} | ID: {dialog.chat.id}")
+            cid = int(f"-100{CHANNEL_ID_STR}") if not CHANNEL_ID_STR.startswith("-") else int(CHANNEL_ID_STR)
             
-            # ID တူရင် (သို့) Channel ဖြစ်ရင် Cache ထဲ မှတ်ခိုင်းမယ်
-            if dialog.chat.id == target_id:
-                found_channel = True
-                print("✅ Match found! Cache updated.")
-                break
+        # Session String သုံးထားရင် get_chat က ၁၀၀% အလုပ်လုပ်ပါတယ်
+        chat_info = await bot.get_chat(cid)
+        print(f"✅ Connected to Channel: {chat_info.title}")
         
-        # Loop ပတ်ပြီးမှ တကယ်လှမ်းချိတ်မယ်
-        if found_channel:
-            chat_info = await bot.get_chat(target_id)
-            print(f"🎉 Successfully Connected to: {chat_info.title}")
-        else:
-            # ID မတူရင်တောင် Admin ဖြစ်နေရင် ID အမှန်ကို Log မှာ ပြပေးလိမ့်မယ်
-            print("⚠️ Target ID not found in dialogs. Please check the 'Found Chat' logs above.")
-            # ID အမှန်ကို ရှာပြီး get_chat ပြန်စမ်းမယ်
-            await bot.get_chat(target_id)
-
     except Exception as e:
-        print(f"❌ Connection Error: {e}")
-
+        print(f"❌ Telegram Error: {e}")
+        
 @app.on_event("shutdown")
 async def shutdown(): await bot.stop()
 
