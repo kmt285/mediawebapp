@@ -159,25 +159,44 @@ def get_target_chat_id(chat_id_str: str):
 async def startup():
     print("🚀 Starting up...")
     await bot.start()
+    
+    found_channel = False
+    target_id = None
+    
+    # Env ထဲက ID ကို ဂဏန်းပြောင်းယူမယ်
     try:
-        # နည်းလမ်း (၁) - Invite Link နဲ့ အရင်ဆုံး Channel ကို မိတ်ဆက်မယ်
-        if CHANNEL_INVITE_LINK:
-            print("🔗 Joining/Resolving via Invite Link...")
-            try:
-                # Invite Link သုံးပြီး Chat ကို ဆွဲယူမယ် (Join ပြီးသားဆိုရင်လည်း Info ရတယ်)
-                chat = await bot.get_chat(CHANNEL_INVITE_LINK)
-                print(f"✅ Resolved Channel: {chat.title} ID: {chat.id}")
-                # ဒီအဆင့်မှာ Bot က Channel ID နဲ့ Access Hash ကို Cache ထဲထည့်သွားပြီ
-            except Exception as e:
-                print(f"⚠️ Invite Link Error: {e}")
+        if CHANNEL_ID_STR.startswith("-100"):
+            target_id = int(CHANNEL_ID_STR)
+        else:
+            target_id = int(f"-100{CHANNEL_ID_STR}") if not CHANNEL_ID_STR.startswith("-") else int(CHANNEL_ID_STR)
+    except:
+        print("⚠️ ID format check needed")
 
-        # ပြီးမှ ID နဲ့ ပြန်ချိတ်မယ်
-        cid = get_target_chat_id(CHANNEL_ID_STR)
-        await bot.get_chat(cid)
-        print("✅ Telegram Channel Connected Successfully!")
+    print(f"🔍 Looking for Channel ID: {target_id}")
+
+    try:
+        # Bot ရောက်နေသမျှ Group/Channel အကုန်လုံးကို လိုက်စစ်မယ် (ဒါက အဓိက key ပါ)
+        async for dialog in bot.get_dialogs():
+            print(f"👀 Found Chat: {dialog.chat.title} | ID: {dialog.chat.id}")
+            
+            # ID တူရင် (သို့) Channel ဖြစ်ရင် Cache ထဲ မှတ်ခိုင်းမယ်
+            if dialog.chat.id == target_id:
+                found_channel = True
+                print("✅ Match found! Cache updated.")
+                break
         
+        # Loop ပတ်ပြီးမှ တကယ်လှမ်းချိတ်မယ်
+        if found_channel:
+            chat_info = await bot.get_chat(target_id)
+            print(f"🎉 Successfully Connected to: {chat_info.title}")
+        else:
+            # ID မတူရင်တောင် Admin ဖြစ်နေရင် ID အမှန်ကို Log မှာ ပြပေးလိမ့်မယ်
+            print("⚠️ Target ID not found in dialogs. Please check the 'Found Chat' logs above.")
+            # ID အမှန်ကို ရှာပြီး get_chat ပြန်စမ်းမယ်
+            await bot.get_chat(target_id)
+
     except Exception as e:
-        print(f"❌ Telegram Connection Error: {e}")
+        print(f"❌ Connection Error: {e}")
 
 @app.on_event("shutdown")
 async def shutdown(): await bot.stop()
