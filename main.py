@@ -26,7 +26,6 @@ API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID_STR = os.environ.get("CHANNEL_ID") 
-BOT_SESSION = os.environ.get("BOT_SESSION")
 MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
@@ -62,14 +61,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # Telegram
-if BOT_SESSION:
-    # Session String ရှိရင် ဒါနဲ့ run မယ် (Stable ဖြစ်တယ်)
-    print("✅ Using Session String...")
-    bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, session_string=BOT_SESSION)
-else:
-    # မရှိရင် Token နဲ့ run မယ် (Private Channel ဆို Error တက်နိုင်တယ်)
-    print("⚠️ Using Bot Token (Not recommended for Private Channels)...")
-    bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
+bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
 
 # --- Models ---
 class CreateFolderRequest(BaseModel):
@@ -136,68 +128,18 @@ async def delete_recursive(folder_uid: str, owner: str):
     # 4. အထဲကအရာတွေ ရှင်းသွားပြီဆိုမှ Sub-folder တွေကို ဖျက်မယ်
     await folders_collection.delete_many({"parent_id": folder_uid, "owner": owner})
 
-def get_target_chat_id(chat_id_str: str):
-    """
-    ID string ကို စစ်ဆေးပြီး Integer (သို့) Username string ပြန်ထုတ်ပေးမည့် function
-    """
-    if not chat_id_str:
-        return None
-    
-    chat_id_str = chat_id_str.strip().replace('"', '').replace("'", "")
-    
-    # ဂဏန်းသက်သက်ပဲဆိုရင် (ဥပမာ -100xxx သို့မဟုတ် 100xxx) Integer ပြောင်းမယ်
-    try:
-        if chat_id_str.startswith("-100"):
-            return int(chat_id_str)
-        # တကယ်လို့ User က -100 မထည့်ဘဲ ဂဏန်းချည်းပဲထည့်ရင် -100 ထည့်ပေါင်းပေးမယ်
-        if chat_id_str.isdigit() or (chat_id_str.startswith("-") and chat_id_str[1:].isdigit()):
-             # private channel id အများစုက ဂဏန်း 13 လုံးကျော်တယ်၊ ဒါဆို -100 တပ်ပေးမယ်
-            if len(chat_id_str) > 10 and not chat_id_str.startswith("-100"):
-                 return int(f"-100{chat_id_str}")
-            return int(chat_id_str)
-    except ValueError:
-        pass
-        
-    # ဂဏန်းမဟုတ်ရင် Username (@channel) အနေနဲ့ပဲ ပြန်ပေးမယ်
-    return chat_id_str
-
-#startup
+# --- Startup ---
 @app.on_event("startup")
 async def startup():
-    print("🚀 Starting up...")
-    
-    # Bot ကို start လုပ်မယ်
-    if not bot.is_connected:
-        await bot.start()
-
-    # Env ထဲက ID ကို ယူမယ်
-    target_chat = CHANNEL_ID_STR.strip().replace('"', '').replace("'", "")
-    
-    # Private Channel ID (-100...) ဖြစ်ခဲ့ရင် Integer ပြောင်းမယ်
-    chat_id_int = None
-    if target_chat.startswith("-100"):
-        try:
-            chat_id_int = int(target_chat)
-        except:
-            pass
-
-    print(f"🔍 Connecting to Channel ID: {target_chat}")
-
+    await bot.start()
     try:
-        # ID နဲ့ တိုက်ရိုက်ချိတ်မယ်
-        if chat_id_int:
-            chat = await bot.get_chat(chat_id_int)
-        else:
-            chat = await bot.get_chat(target_chat)
-            
-        print(f"✅ Successfully Connected to: {chat.title} (ID: {chat.id})")
-        
+        # Resolve Channel ID
+        cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
+        await bot.get_chat(cid)
+        print("✅ Connected to Telegram Channel")
     except Exception as e:
-        print(f"❌ CONNECTION ERROR: {e}")
-        print("⚠️ IMPORTANT FIX: Please regenerate your SESSION STRING after sending a message to the channel.")
-        # Error တက်လဲ Server ကို မပိတ်ဘဲ Run ခိုင်းထားမယ် (ဒါမှ Web ပေါ်မှာ ပြင်လို့ရမှာ)
-        pass
-        
+        print(f"❌ Telegram Error: {e}")
+
 @app.on_event("shutdown")
 async def shutdown(): await bot.stop()
 
@@ -287,7 +229,7 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
     user = await get_current_user(token)
     
     # Telegram Upload
-    target_id = get_target_chat_id(CHANNEL_ID_STR)
+    target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
