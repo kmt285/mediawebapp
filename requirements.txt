@@ -13,4 +13,3 @@ aiofiles
 authlib
 itsdangerous
 httpx
-gunicorn
