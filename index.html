@@ -181,6 +181,8 @@
     </div>
 
     <script>
+        const MAX_MB = 50;
+        const MAX_BYTES = MAX_MB * 1024 * 1024; // 50MB in bytes
 
         // --- Password Logic ---
         function openPasswordModal(uid, hasPassword) {
@@ -370,6 +372,15 @@ async function pasteItem() {
         // --- GUEST ---
         function guestUpload(file) {
             if(!file) return;
+
+            // --- SIZE CHECK START ---
+            if (file.size > MAX_BYTES) {
+                showToast(`File too large! Max allowed is ${MAX_MB}MB.`, 'error');
+                resetGuest(); // Input ကို ပြန်ရှင်းမယ်
+                return;
+            }
+            // --- SIZE CHECK END ---
+
             document.getElementById('guest-dropzone').classList.add('hidden');
             document.getElementById('guest-progress').classList.remove('hidden');
             
@@ -536,6 +547,16 @@ async function pasteItem() {
 
         async function driveUpload(file) {
             if(!file) return;
+
+            // --- SIZE CHECK START ---
+            if (file.size > MAX_BYTES) {
+                showToast(`File too large! Max allowed is ${MAX_MB}MB.`, 'error');
+                // Input value ကို reset လုပ်ပေးရင် ပိုကောင်းပါတယ်
+                document.getElementById('drive-file').value = ''; 
+                return;
+            }
+            // --- SIZE CHECK END ---
+
             document.getElementById('drive-progress').classList.remove('hidden');
             const bar = document.getElementById('drive-bar');
             
