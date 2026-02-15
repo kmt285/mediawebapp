@@ -1,4 +1,3 @@
-
 fastapi
 uvicorn
 python-multipart
@@ -14,3 +13,4 @@ aiofiles
 authlib
 itsdangerous
 httpx
+gunicorn
