@@ -4,6 +4,8 @@ import uuid
 import uvicorn
 import aiofiles
 import mimetypes
+import asyncio
+import httpx
 from typing import Optional, List
 from datetime import datetime, timedelta
 from authlib.integrations.starlette_client import OAuth
@@ -31,6 +33,18 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 MAX_FILE_SIZE = 50 * 1024 * 1024
+RENDER_URL = "https://www.myanmarcloud.online"
+
+async def keep_alive():
+    """Server ကို ၁၀ မိနစ်တစ်ခါ Ping လုပ်ပြီး အိပ်မသွားအောင် တားပေးမည့် function"""
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                response = await client.get(RENDER_URL)
+                print(f"Keep Alive Ping: {response.status_code}")
+            except Exception as e:
+                print(f"Keep Alive Error: {e}")
+            await asyncio.sleep(600) # ၆၀၀ စက္ကန့် (၁၀ မိနစ်)
 
 # --- Setup ---
 app = FastAPI()
@@ -133,6 +147,7 @@ async def delete_recursive(folder_uid: str, owner: str):
 @app.on_event("startup")
 async def startup():
     await bot.start()
+    asyncio.create_task(keep_alive())
     try:
         # Resolve Channel ID
         cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
