@@ -22,7 +22,7 @@
             <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">MyanmarCloud</h1>
         </div>
         
-        <div id="auth-guest" class="flex gap-2">
+        <div id="auth-guest" class="hidden flex gap-2">
             <button onclick="toggleModal('login-modal')" class="px-4 py-2 bg-gray-800 border border-gray-600 rounded hover:bg-gray-700 text-sm">Login</button>
             <button onclick="toggleModal('register-modal')" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm">Sign Up</button>
         </div>
@@ -35,7 +35,7 @@
 
     <div class="flex-1 overflow-hidden relative">
 
-        <div id="view-guest" class="h-full flex flex-col items-center justify-center p-4">
+        <div id="view-guest" class="hidden h-full flex flex-col items-center justify-center p-4">
             <div class="glass p-10 rounded-2xl max-w-lg w-full text-center shadow-2xl">
                 <h2 class="text-3xl font-bold mb-2">Upload & Share</h2>
                 <p class="text-gray-400 mb-8">No login required. Original quality.</p>
@@ -350,24 +350,27 @@ async function pasteItem() {
         let folderHistory = [{id: 'root', name: 'Home'}];
         
         function init() {
-            const token = localStorage.getItem('token');
-            if(token) {
-                document.getElementById('auth-guest').classList.add('hidden');
-                document.getElementById('auth-user').classList.remove('hidden');
-                document.getElementById('username-display').innerText = localStorage.getItem('username');
-                
-                document.getElementById('view-guest').classList.add('hidden');
-                document.getElementById('view-drive').classList.remove('hidden');
-                
-                loadDriveContent();
-            } else {
-                document.getElementById('auth-guest').classList.remove('hidden');
-                document.getElementById('auth-user').classList.add('hidden');
-                
-                document.getElementById('view-guest').classList.remove('hidden');
-                document.getElementById('view-drive').classList.add('hidden');
-            }
-        }
+    const token = localStorage.getItem('token');
+    
+    if(token) {
+        // User Login ဝင်ထားရင်
+        document.getElementById('auth-guest').classList.add('hidden'); // သေချာအောင် ထပ် hide
+        document.getElementById('auth-user').classList.remove('hidden'); // User name ကိုဖော်မည်
+        document.getElementById('username-display').innerText = localStorage.getItem('username');
+        
+        document.getElementById('view-guest').classList.add('hidden');
+        document.getElementById('view-drive').classList.remove('hidden'); // Drive ကိုဖော်မည်
+        
+        loadDriveContent();
+    } else {
+        // Login မဝင်ထားရင် (Guest)
+        document.getElementById('auth-guest').classList.remove('hidden'); // Login ခလုတ်ကို ဖော်မည်
+        document.getElementById('auth-user').classList.add('hidden');
+        
+        document.getElementById('view-guest').classList.remove('hidden'); // Upload box ကို ဖော်မည်
+        document.getElementById('view-drive').classList.add('hidden');
+    }
+}
 
         // --- GUEST ---
         function guestUpload(file) {
