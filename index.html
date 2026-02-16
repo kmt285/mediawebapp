@@ -180,6 +180,17 @@
         </div>
     </div>
 
+    <div id="context-menu" class="fixed hidden bg-gray-800 border border-gray-600 shadow-2xl rounded-lg w-48 z-[100] py-1 overflow-hidden">
+        <button onclick="menuAction('open')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-gray-200"><i class="fas fa-external-link-alt w-5"></i> Open</button>
+        <button onclick="menuAction('rename')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-blue-300"><i class="fas fa-pen w-5"></i> Rename</button>
+        <button onclick="menuAction('cut')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-purple-300"><i class="fas fa-scissors w-5"></i> Cut / Move</button>
+        <button onclick="menuAction('password')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-yellow-300"><i class="fas fa-lock w-5"></i> Password</button>
+        <button onclick="menuAction('copyLink')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-green-300"><i class="fas fa-link w-5"></i> Copy Link</button>
+        <button onclick="menuAction('download')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-white"><i class="fas fa-download w-5"></i> Download</button>
+        <div class="border-t border-gray-600 my-1"></div>
+        <button onclick="menuAction('delete')" class="w-full text-left px-4 py-2 hover:bg-red-900/50 text-sm text-red-400"><i class="fas fa-trash w-5"></i> Delete</button>
+    </div>
+
     <script>
         const MAX_MB = 50;
         const MAX_BYTES = MAX_MB * 1024 * 1024; // 50MB in bytes
@@ -475,6 +486,40 @@ async function pasteItem() {
                     return;
                 }
 
+                // Folders (Right Click Enabled)
+                data.folders.forEach(f => {
+                    grid.innerHTML += `
+                        <div ondblclick="enterFolder('${f.uid}', '${f.name}')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'folder')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
+                            <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
+                            <p class="text-sm text-center text-gray-200 truncate w-full px-2">${f.name}</p>
+                        </div>`;
+                });
+            
+                // Files (Right Click Enabled)
+                data.files.forEach(f => {
+                    let displayIcon = f.has_thumb 
+                        ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
+                        : getFileIcon(f.name);
+
+                    grid.innerHTML += `
+                        <div ondblclick="window.open('/view/${f.uid}', '_blank')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
+                            ${displayIcon}
+                            <div class="w-full text-center mt-auto">
+                                <p class="text-xs text-gray-200 truncate w-full font-medium">${f.name}</p>
+                                <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
+                            </div>
+                            ${f.has_password ? '<div class="absolute top-2 left-2 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
+                        </div>`;
+                });
+                
+                if(!searchQuery) updateBreadcrumbs();
+
+            } catch(e) { 
+                console.error(e);
+                showToast('Error loading content', 'error');
+            }
+        }
+
                 // Folders (With Rename Button)
                 data.folders.forEach(f => {
                     grid.innerHTML += `
@@ -698,6 +743,67 @@ async function pasteItem() {
 
         function logout() { localStorage.clear(); location.reload(); }
         function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+
+        // --- CONTEXT MENU LOGIC ---
+        let selectedItem = null; // {uid, name, type, hasPwd}
+
+        function openContextMenu(e, uid, name, type, hasPwd=false) {
+            e.preventDefault(); 
+            selectedItem = { uid, name, type, hasPwd };
+
+            const menu = document.getElementById('context-menu');
+            
+            // Mouse Position
+            let x = e.pageX;
+            let y = e.pageY;
+            
+            // Screen အစွန်းထွက်မသွားအောင် ထိန်းညှိခြင်း
+            if(x + 200 > window.innerWidth) x = x - 200;
+            if(y + 300 > window.innerHeight) y = y - 300;
+
+            menu.style.left = `${x}px`;
+            menu.style.top = `${y}px`;
+            menu.classList.remove('hidden');
+        }
+
+        // Close menu on click elsewhere
+        document.addEventListener('click', () => {
+            document.getElementById('context-menu').classList.add('hidden');
+        });
+
+        // Menu Actions
+        function menuAction(action) {
+            if(!selectedItem) return;
+            const { uid, name, type, hasPwd } = selectedItem;
+
+            switch(action) {
+                case 'open':
+                    if(type === 'folder') enterFolder(uid, name);
+                    else window.open(`/view/${uid}`, '_blank');
+                    break;
+                case 'rename':
+                    renameItem(uid, name, type);
+                    break;
+                case 'cut':
+                    cutItem(uid, name, type);
+                    break;
+                case 'password':
+                    if(type === 'folder') showToast("Folders cannot be locked yet", "error");
+                    else openPasswordModal(uid, hasPwd);
+                    break;
+                case 'copyLink':
+                    if(type === 'folder') showToast("Cannot link folders yet", "error");
+                    else copyLink(uid);
+                    break;
+                case 'download':
+                    if(type === 'folder') showToast("Cannot download folders", "error");
+                    else window.open(`/dl/${uid}`, '_blank');
+                    break;
+                case 'delete':
+                    deleteItem(uid, type);
+                    break;
+            }
+        }
 
         // Start
         init();
