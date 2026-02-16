@@ -520,62 +520,6 @@ async function pasteItem() {
             }
         }
 
-                // Folders (With Rename Button)
-                data.folders.forEach(f => {
-                    grid.innerHTML += `
-                        <div ondblclick="enterFolder('${f.uid}', '${f.name}')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32">
-                            <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
-                            <p class="text-sm text-center text-gray-200 truncate w-full px-2 select-none">${f.name}</p>
-                            
-                            <div class="absolute top-2 right-2 hidden group-hover:flex gap-1">
-                                <button onclick="event.stopPropagation(); cutItem('${f.uid}', '${f.name}', 'folder')" class="bg-gray-900 text-purple-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Cut / Move"><i class="fas fa-scissors text-xs"></i></button>
-                                <button onclick="event.stopPropagation(); renameItem('${f.uid}', '${f.name}', 'folder')" class="bg-gray-900 text-blue-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Rename"><i class="fas fa-pen text-xs"></i></button>
-                                <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'folder')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Delete"><i class="fas fa-times text-xs"></i></button>
-                            </div>
-                        </div>`;
-                });
-            
-                // Files (With Rename Button added)
-                data.files.forEach(f => {
-                    let displayIcon = f.has_thumb 
-                        ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600">` 
-                        : getFileIcon(f.name);
-
-                    let lockIcon = f.has_password 
-                        ? '<i class="fas fa-lock text-red-400 text-xs"></i>' 
-                        : '<i class="fas fa-unlock text-gray-400 text-xs"></i>';
-
-                    grid.innerHTML += `
-                        <div ondblclick="window.open('/view/${f.uid}', '_blank')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32" title="${f.name}">
-                            
-                            ${displayIcon}
-                            
-                            <div class="w-full text-center mt-auto">
-                                <p class="text-xs text-gray-200 truncate w-full select-none font-medium">${f.name}</p>
-                                <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
-                            </div>
-                            
-                            <div class="absolute top-1 right-1 hidden group-hover:flex flex-wrap justify-end w-16 gap-1 z-10">
-                                <button onclick="event.stopPropagation(); cutItem('${f.uid}', '${f.name}', 'file')" class="bg-gray-900 text-purple-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Cut / Move"><i class="fas fa-scissors text-xs"></i></button>
-                                <button onclick="event.stopPropagation(); renameItem('${f.uid}', '${f.name}', 'file')" class="bg-gray-900 text-blue-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Rename"><i class="fas fa-pen text-xs"></i></button>
-                                <button onclick="event.stopPropagation(); openPasswordModal('${f.uid}', ${f.has_password})" class="bg-gray-900 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Set Password">${lockIcon}</button>
-                                <button onclick="event.stopPropagation(); copyLink('${f.uid}')" class="bg-gray-900 text-yellow-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80" title="Copy Link"><i class="fas fa-link text-xs"></i></button>
-                                <a href="/dl/${f.uid}" target="_blank" onclick="event.stopPropagation()" class="bg-gray-900 text-green-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80"><i class="fas fa-download text-xs"></i></a>
-                                <button onclick="event.stopPropagation(); deleteItem('${f.uid}', 'file')" class="bg-gray-900 text-red-400 hover:text-white rounded-full w-6 h-6 flex items-center justify-center bg-opacity-80"><i class="fas fa-trash text-xs"></i></button>
-                            </div>
-                            
-                            ${f.has_password ? '<div class="absolute top-2 left-2 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
-                        </div>`;
-                });
-                
-                if(!searchQuery) updateBreadcrumbs();
-
-            } catch(e) { 
-                console.error(e);
-                showToast('Error loading content', 'error');
-            }
-        }
-
        // --- Create Folder & Delete Logic ---
         function createFolder() {
             openPrompt("Create New Folder", "Enter Folder Name...", async (name) => {
