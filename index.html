@@ -582,56 +582,52 @@ async function pasteItem() {
         }
 
         // Main Function: ဖိုင်အများကြီးကို Loop ပတ်ပြီး တင်မယ့်ကောင်
-        async function driveUpload(files) {
-            if (!files || files.length === 0) return;
+        // index.html script အပိုင်း
 
-            const progressContainer = document.getElementById('drive-progress');
-            const progressBar = document.getElementById('drive-bar');
-            
-            progressContainer.classList.remove('hidden');
-            
-            let successCount = 0;
-            showToast(`Start uploading for ${files.length} file(s)...`);
+async function driveUpload(files) {
+    if (!files || files.length === 0) return;
 
-            // Loop ပတ်ပြီး တင်မယ်
-            for (let i = 0; i < files.length; i++) {
-                progressBar.style.width = "0%"; // Bar ကို reset ချ
-                
-                // ဒီနေရာမှာ အရင်က အဖြေမစစ်ဘဲ count တိုးမိလို့ မှားတာပါ
-                // အခု isSuccess ကို စောင့်ပြီး True ဖြစ်မှ Count တိုးပါမယ်
-                const isSuccess = await uploadSingleFile(files[i]); 
-                
-                if (isSuccess) {
-                    successCount++;
-                }
-            }
+    const progressContainer = document.getElementById('drive-progress');
+    const progressBar = document.getElementById('drive-bar');
+    
+    progressContainer.classList.remove('hidden');
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    showToast(`Starting upload for ${files.length} file(s)...`);
 
-            // အားလုံးပြီးသွားရင်
-            progressContainer.classList.add('hidden');
-            progressBar.style.width = "0%";
-            document.getElementById('drive-file').value = ''; // Input Clear
-            
-            // Result ပြမယ်
-            if (successCount > 0) {
-                showToast(`"${successCount}" file(s) Uploaded! `, 'success');
-                loadDriveContent(); // UI Refresh
+    // Files တွေကို တစ်ခုပြီးတစ်ခု တင်ပါမယ် (Parallel မဟုတ်ဘဲ Sequential တင်တာက Server Load သက်သာစေပါတယ်)
+    for (let i = 0; i < files.length; i++) {
+        progressBar.style.width = "0%"; // Reset bar for each file
+        
+        // uploadSingleFile က Promise ပြန်ပေးတဲ့အတွက် await နဲ့ စောင့်ရပါမယ်
+        try {
+            const isSuccess = await uploadSingleFile(files[i]); 
+            if (isSuccess) {
+                successCount++;
             } else {
-                showToast(`File too large! Max allowed is ${MAX_MB}MB.`, 'error');
+                failCount++;
             }
+        } catch (err) {
+            console.error(err);
+            failCount++;
         }
-        // --- MULTIPLE UPLOAD LOGIC END ---
+    }
 
-        function deleteItem(uid, type) {
-            openConfirm(async () => {
-                const token = localStorage.getItem('token');
-                await fetch(`/api/delete/${uid}?type=${type}`, {
-                    method: 'DELETE',
-                    headers: {'Authorization': `Bearer ${token}`}
-                });
-                showToast("Item Deleted!");
-                loadDriveContent();
-            });
-        }
+    // အားလုံးပြီးသွားရင်
+    progressContainer.classList.add('hidden');
+    progressBar.style.width = "0%";
+    document.getElementById('drive-file').value = ''; // Input Clear
+    
+    // Result ပြမယ်
+    if (successCount > 0) {
+        showToast(`Upload Complete: ${successCount} success, ${failCount} failed`, 'success');
+        loadDriveContent(); // UI Refresh
+    } else {
+        showToast(`All uploads failed. Check connection or file size.`, 'error');
+    }
+}
 
         // --- NAVIGATION ---
         function enterFolder(uid, name) {
