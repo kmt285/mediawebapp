@@ -162,7 +162,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 async def login_google(request: Request):
     # Render မှာ တင်ထားတဲ့ ဒိုမိန်းအမှန်ကို တိုက်ရိုက် ရေးထည့်တာ ပိုသေချာပါတယ်
     # (Local မှာ စမ်းရင် 'http://localhost:8000/auth/google' လို့ ပြောင်းသုံးပါ)
-    redirect_uri = "https://mediawebapp.onrender.com/auth/google" 
+    redirect_uri = "https://www.myanmarcloud.online/auth/google" 
     
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
