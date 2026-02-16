@@ -103,21 +103,25 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
     except JWTError: return None
 
 # --- Helper Functions ---
-# (ရှိပြီးသား function တွေရဲ့ အောက်မှာ ဒီ function ကို ထပ်ထည့်ပါ)
-
+# main.py ထဲက delete_recursive function ကို ဒီလိုအစားထိုးပါ
 async def delete_recursive(folder_uid: str, owner: str):
     """
     Folder တစ်ခုအောက်ရှိ File များနှင့် Sub-folder များကို အဆင့်ဆင့် လိုက်ဖျက်ပေးမည့် Function
+    (Depth-First approach ကိုသုံးထားလို့ ပိုစိတ်ချရပါတယ်)
     """
-    # 1. ဒီ Folder အောက်မှာရှိတဲ့ File တွေကို အရင်ဖျက်မယ်
+    # 1. ဒီ Folder အောက်မှာရှိတဲ့ Sub-folder တွေကို အရင်ရှာမယ် (List အနေနဲ့ အရင်ထုတ်မယ်)
+    sub_folders = []
+    async for sub in folders_collection.find({"parent_id": folder_uid, "owner": owner}):
+        sub_folders.append(sub["uid"])
+
+    # 2. Sub-folder တစ်ခုချင်းစီအတွက် Recursive ခေါ်မယ်
+    for sub_uid in sub_folders:
+        await delete_recursive(sub_uid, owner)
+
+    # 3. ဒီ Folder အောက်က File တွေကို ဖျက်မယ်
     await files_collection.delete_many({"parent_id": folder_uid, "owner": owner})
 
-    # 2. ဒီ Folder အောက်မှာရှိတဲ့ Sub-folder တွေကို ရှာမယ်
-    async for sub_folder in folders_collection.find({"parent_id": folder_uid, "owner": owner}):
-        # 3. တွေ့တဲ့ Sub-folder တစ်ခုချင်းစီအတွက် ဒီ Function ကိုပြန်ခေါ်မယ် (Recursion)
-        await delete_recursive(sub_folder["uid"], owner)
-
-    # 4. အထဲကအရာတွေ ရှင်းသွားပြီဆိုမှ Sub-folder တွေကို ဖျက်မယ်
+    # 4. နောက်ဆုံးမှ Folder တွေကို ဖျက်မယ်
     await folders_collection.delete_many({"parent_id": folder_uid, "owner": owner})
 
 # --- Startup ---
@@ -329,15 +333,17 @@ async def rename_item(req: RenameRequest, token: str = Depends(oauth2_scheme)):
     await col.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {field: req.new_name}})
     return {"message": "Renamed"}
 
+# main.py ထဲက move_item function
 @app.put("/api/move")
 async def move_item(req: MoveRequest, token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
     
-    # Target Folder ရှိမရှိ စစ်ဆေးခြင်း (Root မဟုတ်ရင်)
+    # Target Folder ရှိမရှိ နှင့် ကိုယ်ပိုင် ဟုတ်မဟုတ် စစ်ဆေးခြင်း
     if req.target_parent_id != "root":
         target = await folders_collection.find_one({"uid": req.target_parent_id, "owner": user["username"]})
-        if not target: raise HTTPException(status_code=404, detail="Target folder not found")
+        if not target: 
+            raise HTTPException(status_code=404, detail="Destination folder not found or access denied")
         
     # ကိုယ့် Folder ကို ကိုယ့်ထဲပြန်ထည့်လို့မရအောင် ကာကွယ်ခြင်း
     if req.type == "folder" and req.uid == req.target_parent_id:
@@ -345,7 +351,7 @@ async def move_item(req: MoveRequest, token: str = Depends(oauth2_scheme)):
 
     col = folders_collection if req.type == "folder" else files_collection
     
-    # Parent ID ကို Update လုပ်ခြင်း (နေရာရွှေ့ခြင်း)
+    # Root ဆိုရင် None ပြောင်းပေးရမယ် (Database Schema အရ)
     new_parent = None if req.target_parent_id == "root" else req.target_parent_id
     
     result = await col.update_one(
@@ -354,7 +360,7 @@ async def move_item(req: MoveRequest, token: str = Depends(oauth2_scheme)):
     )
     
     if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="Move failed")
+        raise HTTPException(status_code=400, detail="Item not found or move failed")
 
     return {"message": "Moved successfully"}
 
