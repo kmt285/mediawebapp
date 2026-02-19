@@ -684,6 +684,30 @@ async function driveUpload(files) {
         function logout() { localStorage.clear(); location.reload(); }
         function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
 
+        // --- DELETE LOGIC ---
+        function deleteItem(uid, type) {
+            openConfirm(async () => {
+                const token = localStorage.getItem('token');
+                try {
+                    // API ကို type ပါ ပို့ပေးရပါမယ်
+                    const res = await fetch(`/api/delete/${uid}?type=${type}`, {
+                        method: 'DELETE',
+                        headers: {'Authorization': `Bearer ${token}`}
+                    });
+                    
+                    if(res.ok) {
+                        showToast("Deleted successfully!");
+                        loadDriveContent(); // UI ကို Refresh လုပ်မယ်
+                    } else {
+                        const err = await res.json();
+                        showToast(err.detail || "Delete Failed", "error");
+                    }
+                } catch(e) { 
+                    showToast("Connection Error", "error"); 
+                }
+            });
+        }
+
         // --- CONTEXT MENU LOGIC ---
         let selectedItem = null; // {uid, name, type, hasPwd}
 
