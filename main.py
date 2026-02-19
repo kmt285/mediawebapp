@@ -83,6 +83,17 @@ class SetPasswordRequest(BaseModel):
     uid: str
     password: Optional[str] = None
 
+class BatchItem(BaseModel):
+    uid: str
+    type: str  # 'file' or 'folder'
+
+class BatchDeleteRequest(BaseModel):
+    items: List[BatchItem]
+
+class BatchMoveRequest(BaseModel):
+    items: List[BatchItem]
+    target_parent_id: str
+
 # --- Helpers ---
 def get_password_hash(password): return pwd_context.hash(password)
 def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
@@ -466,6 +477,54 @@ async def set_file_password(req: SetPasswordRequest, token: str = Depends(oauth2
     if not user: raise HTTPException(status_code=401)
     await files_collection.update_one({"uid": req.uid, "owner": user["username"]}, {"$set": {"share_password": req.password}})
     return {"message": "Password updated"}
+
+# --- Batch Operations Routes (Routes အပိုင်းမှာ ထပ်ဖြည့်ပါ) ---
+
+@app.post("/api/batch/delete")
+async def batch_delete(req: BatchDeleteRequest, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    
+    deleted_count = 0
+    
+    for item in req.items:
+        try:
+            if item.type == "folder":
+                await delete_recursive(item.uid, user["username"])
+                await folders_collection.delete_one({"uid": item.uid, "owner": user["username"]})
+            elif item.type == "file":
+                await files_collection.delete_one({"uid": item.uid, "owner": user["username"]})
+            deleted_count += 1
+        except:
+            continue # တချို့ဖျက်မရရင် ကျော်သွားမယ်
+            
+    return {"message": f"Deleted {deleted_count} items"}
+
+@app.put("/api/batch/move")
+async def batch_move(req: BatchMoveRequest, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+
+    # Check Target
+    target_parent = None if req.target_parent_id == "root" else req.target_parent_id
+    if target_parent:
+        target = await folders_collection.find_one({"uid": target_parent, "owner": user["username"]})
+        if not target: raise HTTPException(status_code=404, detail="Target folder not found")
+
+    moved_count = 0
+    for item in req.items:
+        # ကိုယ့်အထဲကိုယ် ပြန်မထည့်မိအောင် စစ်မယ်
+        if item.type == "folder" and item.uid == req.target_parent_id:
+            continue
+
+        col = folders_collection if item.type == "folder" else files_collection
+        res = await col.update_one(
+            {"uid": item.uid, "owner": user["username"]},
+            {"$set": {"parent_id": target_parent}}
+        )
+        if res.modified_count > 0: moved_count += 1
+
+    return {"message": f"Moved {moved_count} items"}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
