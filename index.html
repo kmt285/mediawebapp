@@ -420,40 +420,45 @@ async function pasteItem() {
         function toggleSelect(uid, type) {
             const key = `${uid}|${type}`;
             const card = document.getElementById(`card-${uid}`);
-            const check = document.getElementById(`check-${uid}`);
+            const checkIcon = document.getElementById(`check-icon-${uid}`);
 
             if (selectedItems.has(key)) {
+                // Deselect လုပ်ခြင်း
                 selectedItems.delete(key);
-                card.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/30');
-                check.checked = false;
+                card.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/50');
+                if(checkIcon) checkIcon.classList.add('hidden');
             } else {
+                // Select လုပ်ခြင်း
                 selectedItems.add(key);
-                card.classList.add('ring-2', 'ring-blue-500', 'bg-blue-900/30');
-                check.checked = true;
+                card.classList.add('ring-2', 'ring-blue-500', 'bg-blue-900/50');
+                if(checkIcon) checkIcon.classList.remove('hidden');
             }
             updateBatchUI();
         }
 
+        function clearSelection() {
+            selectedItems.clear();
+            // UI မှာ အရောင်တွေပြန်ဖျောက်၊ အမှန်ခြစ်တွေ ပြန်ဖျောက်
+            document.querySelectorAll('.item-card').forEach(el => {
+                el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/50');
+            });
+            document.querySelectorAll('[id^="check-icon-"]').forEach(el => {
+                el.classList.add('hidden');
+            });
+            updateBatchUI();
+        }
+
+        // updateBatchUI() ကတော့ အရင်အတိုင်း ထားထားလို့ရပါတယ်
         function updateBatchUI() {
             const bar = document.getElementById('batch-bar');
             const count = document.getElementById('batch-count');
             
             if (selectedItems.size > 0) {
-                bar.classList.remove('translate-y-32'); // Show bar
+                bar.classList.remove('translate-y-32'); 
                 count.innerText = `${selectedItems.size} Selected`;
             } else {
-                bar.classList.add('translate-y-32'); // Hide bar
+                bar.classList.add('translate-y-32'); 
             }
-        }
-
-        function clearSelection() {
-            selectedItems.clear();
-            // UI မှာ အရောင်တွေပြန်ဖျောက်
-            document.querySelectorAll('.item-card').forEach(el => {
-                el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/30');
-            });
-            document.querySelectorAll('.item-checkbox').forEach(el => el.checked = false);
-            updateBatchUI();
         }
 
         // --- BATCH ACTIONS ---
@@ -600,41 +605,48 @@ async function pasteItem() {
                // Folders Rendering
                 data.folders.forEach(f => {
                     const isSelected = selectedItems.has(`${f.uid}|folder`);
-                    const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/30' : '';
-                    const checkedState = isSelected ? 'checked' : '';
+                    const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/50' : '';
+                    const checkVisible = isSelected ? '' : 'hidden';
 
+                    // onclick နဲ့ ondblclick ကို main div ပေါ်မှာပဲ တိုက်ရိုက်ခွဲထားပါတယ်
                     grid.innerHTML += `
-                        <div id="card-${f.uid}" class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
-                            <div class="absolute top-2 left-2 z-10" onclick="event.stopPropagation()">
-                                <input type="checkbox" id="check-${f.uid}" class="item-checkbox w-4 h-4 rounded cursor-pointer accent-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ${checkedState ? 'opacity-100' : ''}" 
-                                onchange="toggleSelect('${f.uid}', 'folder')" ${checkedState}>
+                        <div id="card-${f.uid}" 
+                             onclick="toggleSelect('${f.uid}', 'folder')" 
+                             ondblclick="enterFolder('${f.uid}', '${f.name}')" 
+                             oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'folder')" 
+                             class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
+                            
+                            <div id="check-icon-${f.uid}" class="absolute top-2 left-2 text-blue-500 ${checkVisible} z-10 bg-white rounded-full leading-none shadow-md">
+                                <i class="fas fa-check-circle text-xl"></i>
                             </div>
                             
-                            <div class="w-full h-full flex flex-col items-center justify-center" ondblclick="enterFolder('${f.uid}', '${f.name}')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'folder')">
-                                <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
-                                <p class="text-sm text-center text-gray-200 truncate w-full px-2">${f.name}</p>
-                            </div>
+                            <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md pointer-events-none"></i>
+                            <p class="text-sm text-center text-gray-200 truncate w-full px-2 pointer-events-none">${f.name}</p>
                         </div>`;
                 });
             
                 // Files Rendering
                 data.files.forEach(f => {
                     const isSelected = selectedItems.has(`${f.uid}|file`);
-                    const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/30' : '';
-                    const checkedState = isSelected ? 'checked' : '';
+                    const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/50' : '';
+                    const checkVisible = isSelected ? '' : 'hidden';
 
                     let displayIcon = f.has_thumb 
                         ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
                         : getFileIcon(f.name);
 
                     grid.innerHTML += `
-                        <div id="card-${f.uid}" class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
-                             <div class="absolute top-2 left-2 z-10" onclick="event.stopPropagation()">
-                                <input type="checkbox" id="check-${f.uid}" class="item-checkbox w-4 h-4 rounded cursor-pointer accent-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ${checkedState ? 'opacity-100' : ''}" 
-                                onchange="toggleSelect('${f.uid}', 'file')" ${checkedState}>
+                        <div id="card-${f.uid}" 
+                             onclick="toggleSelect('${f.uid}', 'file')"
+                             ondblclick="window.open('/view/${f.uid}', '_blank')" 
+                             oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})" 
+                             class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
+                            
+                            <div id="check-icon-${f.uid}" class="absolute top-2 left-2 text-blue-500 ${checkVisible} z-10 bg-white rounded-full leading-none shadow-md">
+                                <i class="fas fa-check-circle text-xl"></i>
                             </div>
 
-                            <div class="w-full h-full flex flex-col items-center justify-between" ondblclick="window.open('/view/${f.uid}', '_blank')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})">
+                            <div class="w-full h-full flex flex-col items-center justify-between pointer-events-none">
                                 ${displayIcon}
                                 <div class="w-full text-center mt-auto">
                                     <p class="text-xs text-gray-200 truncate w-full font-medium">${f.name}</p>
