@@ -189,7 +189,16 @@
         <button onclick="menuAction('download')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-white"><i class="fas fa-download w-5"></i> Download</button>
         <div class="border-t border-gray-600 my-1"></div>
         <button onclick="menuAction('delete')" class="w-full text-left px-4 py-2 hover:bg-red-900/50 text-sm text-red-400"><i class="fas fa-trash w-5"></i> Delete</button>
+        
+        <div id="batch-bar" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-blue-900/90 backdrop-blur border border-blue-500 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 transition-all duration-300 translate-y-32 z-[80]">
+        <span id="batch-count" class="font-bold text-blue-200">0 Selected</span>
+        <div class="h-6 w-px bg-blue-700"></div>
+        <button onclick="batchAction('move')" class="hover:text-yellow-400 transition" title="Move Selected"><i class="fas fa-scissors"></i> Cut</button>
+        <button onclick="batchAction('delete')" class="hover:text-red-400 transition" title="Delete Selected"><i class="fas fa-trash"></i> Delete</button>
+        <div class="h-6 w-px bg-blue-700"></div>
+        <button onclick="clearSelection()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
     </div>
+
 
     <script>
         const MAX_MB = 50;
@@ -331,28 +340,52 @@ function cancelPaste() {
 async function pasteItem() {
     if (!clipboard) return;
     
-    // API Call
     const token = localStorage.getItem('token');
-    const res = await fetch('/api/move', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-            uid: clipboard.uid,
-            type: clipboard.type,
-            target_parent_id: currentFolder
-        })
-    });
+    
+    // Check if it's a BATCH move or SINGLE move
+    if (clipboard.isBatch) {
+        // --- BATCH MOVE ---
+        const res = await fetch('/api/batch/move', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+                items: clipboard.items, // List of {uid, type}
+                target_parent_id: currentFolder
+            })
+        });
 
-    if (res.ok) {
-        showToast(`Moved "${clipboard.name}" successfully!`);
-        clipboard = null; // Clear clipboard
-        document.getElementById('paste-btn').classList.add('hidden');
-        document.getElementById('cancel-paste-btn').classList.add('hidden');
-        loadDriveContent(); // Refresh UI
+        if (res.ok) {
+            const data = await res.json();
+            showToast(data.message || "Batch Move Successful!");
+        } else {
+            showToast("Batch Move Failed", "error");
+        }
+
     } else {
-        const err = await res.json();
-        showToast(err.detail || "Move Failed", "error");
+        // --- SINGLE MOVE (Existing Logic) ---
+        const res = await fetch('/api/move', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+                uid: clipboard.uid,
+                type: clipboard.type,
+                target_parent_id: currentFolder
+            })
+        });
+        
+        if (res.ok) {
+            showToast(`Moved "${clipboard.name}" successfully!`);
+        } else {
+            const err = await res.json();
+            showToast(err.detail || "Move Failed", "error");
+        }
     }
+
+    // Cleanup
+    clipboard = null;
+    document.getElementById('paste-btn').classList.add('hidden');
+    document.getElementById('cancel-paste-btn').classList.add('hidden');
+    loadDriveContent(); 
 }
 
 
@@ -377,6 +410,84 @@ async function pasteItem() {
                 
                 document.getElementById('view-guest').classList.remove('hidden');
                 document.getElementById('view-drive').classList.add('hidden');
+            }
+        }
+
+        // --- MULTIPLE SELECTION LOGIC ---
+        let selectedItems = new Set(); // Stores Strings: "uid|type" (e.g., "123|file")
+        let isBatchMode = false;
+
+        function toggleSelect(uid, type) {
+            const key = `${uid}|${type}`;
+            const card = document.getElementById(`card-${uid}`);
+            const check = document.getElementById(`check-${uid}`);
+
+            if (selectedItems.has(key)) {
+                selectedItems.delete(key);
+                card.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/30');
+                check.checked = false;
+            } else {
+                selectedItems.add(key);
+                card.classList.add('ring-2', 'ring-blue-500', 'bg-blue-900/30');
+                check.checked = true;
+            }
+            updateBatchUI();
+        }
+
+        function updateBatchUI() {
+            const bar = document.getElementById('batch-bar');
+            const count = document.getElementById('batch-count');
+            
+            if (selectedItems.size > 0) {
+                bar.classList.remove('translate-y-32'); // Show bar
+                count.innerText = `${selectedItems.size} Selected`;
+            } else {
+                bar.classList.add('translate-y-32'); // Hide bar
+            }
+        }
+
+        function clearSelection() {
+            selectedItems.clear();
+            // UI မှာ အရောင်တွေပြန်ဖျောက်
+            document.querySelectorAll('.item-card').forEach(el => {
+                el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/30');
+            });
+            document.querySelectorAll('.item-checkbox').forEach(el => el.checked = false);
+            updateBatchUI();
+        }
+
+        // --- BATCH ACTIONS ---
+        function batchAction(action) {
+            if (selectedItems.size === 0) return;
+
+            const items = Array.from(selectedItems).map(key => {
+                const [uid, type] = key.split('|');
+                return { uid, type };
+            });
+
+            if (action === 'delete') {
+                openConfirm(async () => {
+                    const token = localStorage.getItem('token');
+                    await fetch('/api/batch/delete', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                        body: JSON.stringify({ items: items })
+                    });
+                    showToast(`Deleted ${items.length} items`);
+                    clearSelection();
+                    loadDriveContent();
+                });
+            } 
+            else if (action === 'move') {
+                // Cut Logic for Multiple
+                clipboard = { isBatch: true, items: items }; // Store items in clipboard
+                
+                document.getElementById('paste-btn').classList.remove('hidden');
+                document.getElementById('cancel-paste-btn').classList.remove('hidden');
+                document.getElementById('paste-btn').querySelector('span').innerText = `Paste ${items.length} Items`;
+                
+                showToast(`${items.length} items cut. Go to destination & Paste.`);
+                clearSelection(); // Visual selection ရှင်းလိုက်မယ် (Clipboard ထဲရောက်သွားပြီ)
             }
         }
 
@@ -486,29 +597,51 @@ async function pasteItem() {
                     return;
                 }
 
-                // Folders (Right Click Enabled)
+               // Folders Rendering
                 data.folders.forEach(f => {
+                    const isSelected = selectedItems.has(`${f.uid}|folder`);
+                    const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/30' : '';
+                    const checkedState = isSelected ? 'checked' : '';
+
                     grid.innerHTML += `
-                        <div ondblclick="enterFolder('${f.uid}', '${f.name}')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'folder')" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
-                            <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
-                            <p class="text-sm text-center text-gray-200 truncate w-full px-2">${f.name}</p>
+                        <div id="card-${f.uid}" class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
+                            <div class="absolute top-2 left-2 z-10" onclick="event.stopPropagation()">
+                                <input type="checkbox" id="check-${f.uid}" class="item-checkbox w-4 h-4 rounded cursor-pointer accent-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ${checkedState ? 'opacity-100' : ''}" 
+                                onchange="toggleSelect('${f.uid}', 'folder')" ${checkedState}>
+                            </div>
+                            
+                            <div class="w-full h-full flex flex-col items-center justify-center" ondblclick="enterFolder('${f.uid}', '${f.name}')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'folder')">
+                                <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md"></i>
+                                <p class="text-sm text-center text-gray-200 truncate w-full px-2">${f.name}</p>
+                            </div>
                         </div>`;
                 });
             
-                // Files (Right Click Enabled)
+                // Files Rendering
                 data.files.forEach(f => {
+                    const isSelected = selectedItems.has(`${f.uid}|file`);
+                    const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/30' : '';
+                    const checkedState = isSelected ? 'checked' : '';
+
                     let displayIcon = f.has_thumb 
                         ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
                         : getFileIcon(f.name);
 
                     grid.innerHTML += `
-                        <div ondblclick="window.open('/view/${f.uid}', '_blank')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})" class="bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
-                            ${displayIcon}
-                            <div class="w-full text-center mt-auto">
-                                <p class="text-xs text-gray-200 truncate w-full font-medium">${f.name}</p>
-                                <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
+                        <div id="card-${f.uid}" class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer group relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
+                             <div class="absolute top-2 left-2 z-10" onclick="event.stopPropagation()">
+                                <input type="checkbox" id="check-${f.uid}" class="item-checkbox w-4 h-4 rounded cursor-pointer accent-blue-500 opacity-0 group-hover:opacity-100 transition-opacity ${checkedState ? 'opacity-100' : ''}" 
+                                onchange="toggleSelect('${f.uid}', 'file')" ${checkedState}>
                             </div>
-                            ${f.has_password ? '<div class="absolute top-2 left-2 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
+
+                            <div class="w-full h-full flex flex-col items-center justify-between" ondblclick="window.open('/view/${f.uid}', '_blank')" oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})">
+                                ${displayIcon}
+                                <div class="w-full text-center mt-auto">
+                                    <p class="text-xs text-gray-200 truncate w-full font-medium">${f.name}</p>
+                                    <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
+                                </div>
+                            </div>
+                            ${f.has_password ? '<div class="absolute top-2 right-2 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
                         </div>`;
                 });
                 
