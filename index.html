@@ -652,12 +652,21 @@ async function driveUpload(files) {
 
         // --- AUTH ---
         async function doLogin() {
-            const u = document.getElementById('l-user').value;
-            const p = document.getElementById('l-pass').value;
+            const u = document.getElementById('l-user').value.trim();
+            const p = document.getElementById('l-pass').value.trim();
+            
+            // (၁) အလွတ်ဖြစ်နေရင် တားမယ်
+            if(!u || !p) { showToast('Please enter username and password', 'error'); return; }
+
             const params = new URLSearchParams(); params.append('username', u); params.append('password', p);
             
             try {
-                const res = await fetch('/token', {method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: params});
+                const res = await fetch('/token', {
+                    method: 'POST', 
+                    headers: {'Content-Type':'application/x-www-form-urlencoded'}, 
+                    body: params
+                });
+                
                 if(res.ok) {
                     const data = await res.json();
                     localStorage.setItem('token', data.access_token);
@@ -665,20 +674,41 @@ async function driveUpload(files) {
                     toggleModal('login-modal');
                     showToast(`Welcome back, ${data.username}!`);
                     init();
-                } else showToast('Login Failed', 'error');
+                } else {
+                    // (၂) Backend က ပို့လိုက်တဲ့ Error အတိအကျကို ဖမ်းပြီး ပြမယ်
+                    const err = await res.json();
+                    showToast(err.error || err.detail || 'Login Failed', 'error');
+                }
             } catch(e) { showToast('Connection Error', 'error'); }
         }
 
         async function doRegister() {
-            const u = document.getElementById('r-user').value;
-            const p = document.getElementById('r-pass').value;
+            const u = document.getElementById('r-user').value.trim();
+            const p = document.getElementById('r-pass').value.trim();
+            
+            // (၁) အလွတ်ဖြစ်နေရင် တားမယ်
+            if(!u || !p) { showToast('Please enter username and password', 'error'); return; }
+
             const params = new URLSearchParams(); params.append('username', u); params.append('password', p);
-            const res = await fetch('/register', {method: 'POST', body: params});
-            if(res.ok) { 
-                showToast('Registration Success! Please Login.'); 
-                toggleModal('register-modal'); 
-            }
-            else showToast('Registration Failed', 'error');
+            
+            try {
+                const res = await fetch('/register', {
+                    method: 'POST', 
+                    // (၃) Header အတိအကျ ထည့်ပေးမှ FastAPI က လက်ခံပါမယ်
+                    headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                    body: params
+                });
+                
+                if(res.ok) { 
+                    showToast('Registration Success! Please Login.'); 
+                    toggleModal('register-modal'); 
+                }
+                else {
+                    // (၄) Backend က ပို့လိုက်တဲ့ Error အတိအကျကို ဖမ်းပြီး ပြမယ်
+                    const err = await res.json();
+                    showToast(err.error || err.detail || 'Registration Failed', 'error');
+                }
+            } catch(e) { showToast('Connection Error', 'error'); }
         }
 
         function logout() { localStorage.clear(); location.reload(); }
