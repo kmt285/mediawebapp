@@ -28,7 +28,12 @@
         </div>
         
         <div id="auth-user" class="hidden flex items-center gap-4">
-            <span id="username-display" class="text-blue-300 font-medium"></span>
+            <button onclick="openProfileModal()" class="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-600 px-3 py-1.5 rounded-full transition-all group">
+                <div class="bg-gradient-to-tr from-blue-500 to-purple-600 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs font-bold shadow-md group-hover:scale-105 transition-transform">
+                    <i class="fas fa-user"></i>
+                </div>
+                <span id="username-display" class="text-gray-200 font-medium text-sm pr-1"></span>
+            </button>
             <button onclick="promptLogout()" class="text-red-500 hover:text-red-400 text-lg hover:scale-110 transition-all duration-200" title="Log Out"><i class="fas fa-power-off"></i></button>
         </div>
     </nav>
@@ -197,6 +202,82 @@
             <div class="flex gap-3">
                 <button onclick="toggleModal('logout-modal')" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded font-medium transition">Cancel</button>
                 <button onclick="logout()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded font-medium shadow-lg shadow-red-600/30 transition">Log Out</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="profile-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[80] backdrop-blur-sm">
+        <div class="glass bg-gray-900 w-[90%] max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-gray-700 transform transition-all">
+            
+            <div class="md:w-1/3 bg-gray-800/80 p-6 border-b md:border-b-0 md:border-r border-gray-700">
+                <div class="flex flex-col items-center text-center mb-6 mt-2">
+                    <div class="w-20 h-20 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-3xl text-white font-bold shadow-xl border-2 border-gray-600 mb-3">
+                        <i class="fas fa-user-astronaut"></i>
+                    </div>
+                    <h3 id="prof-fullname-display" class="text-lg font-bold text-white truncate w-full">Loading...</h3>
+                    <p id="prof-username-display" class="text-sm text-blue-400 truncate w-full">@username</p>
+                </div>
+                
+                <div class="space-y-2">
+                    <button onclick="switchTab('prof-general')" id="tab-prof-general" class="w-full text-left px-4 py-2.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 transition-all font-medium"><i class="fas fa-id-card w-6"></i> General</button>
+                    <button onclick="switchTab('prof-security')" id="tab-prof-security" class="w-full text-left px-4 py-2.5 rounded-lg hover:bg-gray-700/50 text-gray-400 transition-all font-medium"><i class="fas fa-shield-alt w-6"></i> Security</button>
+                </div>
+            </div>
+
+            <div class="md:w-2/3 p-6 relative min-h-[350px] bg-gray-900/50">
+                <button onclick="closeProfileModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white transition bg-gray-800 rounded-full w-8 h-8 flex items-center justify-center"><i class="fas fa-times"></i></button>
+                
+                <div id="prof-general" class="tab-content block mt-2">
+                    <h2 class="text-xl font-bold text-white mb-5 border-b border-gray-700 pb-3"><i class="fas fa-info-circle text-blue-500 mr-2"></i>Account Overview</h2>
+                    
+                    <div class="space-y-4 mb-6">
+                        <div class="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                            <label class="text-[11px] text-gray-400 uppercase tracking-wider font-bold">Full Name</label>
+                            <p id="prof-info-fullname" class="text-white font-medium mt-0.5">...</p>
+                        </div>
+                        <div class="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                            <label class="text-[11px] text-gray-400 uppercase tracking-wider font-bold">Username / Email</label>
+                            <p id="prof-info-username" class="text-white font-medium mt-0.5">...</p>
+                        </div>
+                        <div class="bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                            <label class="text-[11px] text-gray-400 uppercase tracking-wider font-bold">Account Created</label>
+                            <p id="prof-info-date" class="text-white font-medium mt-0.5">...</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-900/20 p-4 rounded-xl border border-blue-800/30">
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-blue-300 font-medium"><i class="fas fa-cloud text-blue-500 mr-1"></i> Storage</span>
+                            <span class="text-blue-400 text-xs">Unlimited (Free Tier)</span>
+                        </div>
+                        <div class="w-full bg-gray-800 rounded-full h-2">
+                            <div class="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="prof-security" class="tab-content hidden mt-2">
+                    <h2 class="text-xl font-bold text-white mb-5 border-b border-gray-700 pb-3"><i class="fas fa-key text-yellow-500 mr-2"></i>Change Password</h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm text-gray-300 block mb-1">Current Password</label>
+                            <input type="password" id="cp-old" placeholder="Enter old password" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-2.5 text-white outline-none focus:border-yellow-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-300 block mb-1">New Password</label>
+                            <input type="password" id="cp-new" placeholder="Enter new password" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-2.5 text-white outline-none focus:border-yellow-500 transition-colors">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-300 block mb-1">Confirm New Password</label>
+                            <input type="password" id="cp-confirm" placeholder="Confirm new password" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-2.5 text-white outline-none focus:border-yellow-500 transition-colors">
+                        </div>
+                        <button onclick="changePassword()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2.5 px-4 rounded-lg mt-4 shadow-lg shadow-yellow-600/20 transition-all flex justify-center items-center gap-2">
+                            <i class="fas fa-save"></i> Update Password
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -1115,6 +1196,79 @@ async function driveUpload(files) {
                 mainBtn.classList.remove('rotate-90', 'bg-red-500', 'hover:bg-red-400');
                 mainBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
             }
+        }
+
+        // --- USER PROFILE & SETTINGS LOGIC ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+            
+            // Tab တွေအရောင်ပြောင်းမယ်
+            document.getElementById('tab-prof-general').className = "w-full text-left px-4 py-2.5 rounded-lg hover:bg-gray-700/50 text-gray-400 transition-all font-medium";
+            document.getElementById('tab-prof-security').className = "w-full text-left px-4 py-2.5 rounded-lg hover:bg-gray-700/50 text-gray-400 transition-all font-medium";
+            
+            const activeTabBtn = document.getElementById(`tab-${tabId}`);
+            activeTabBtn.className = "w-full text-left px-4 py-2.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30 transition-all font-medium";
+        }
+
+        async function openProfileModal() {
+            document.getElementById('profile-modal').classList.remove('hidden');
+            switchTab('prof-general');
+            
+            const token = localStorage.getItem('token');
+            try {
+                // Backend ကနေ User Data လှမ်းယူမယ်
+                const res = await fetch('/api/user/profile', { headers: {'Authorization': `Bearer ${token}`} });
+                if(res.ok) {
+                    const data = await res.json();
+                    
+                    // Frontend မှာ Data တွေ ဖြည့်ပြမယ်
+                    const displayName = data.full_name || data.username.split('@')[0];
+                    document.getElementById('prof-fullname-display').innerText = displayName;
+                    document.getElementById('prof-username-display').innerText = `@${data.username.split('@')[0]}`;
+                    
+                    document.getElementById('prof-info-fullname').innerText = data.full_name || "Not set";
+                    document.getElementById('prof-info-username').innerText = data.username;
+                    
+                    // နေ့စွဲကို ဖတ်ရလွယ်အောင် ပြောင်းမယ်
+                    const dateObj = data.created_at ? new Date(data.created_at * 1000) : new Date();
+                    document.getElementById('prof-info-date').innerText = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                }
+            } catch(e) { console.error("Failed to load profile", e); }
+        }
+
+        function closeProfileModal() {
+            document.getElementById('profile-modal').classList.add('hidden');
+            document.getElementById('cp-old').value = '';
+            document.getElementById('cp-new').value = '';
+            document.getElementById('cp-confirm').value = '';
+        }
+
+        async function changePassword() {
+            const oldP = document.getElementById('cp-old').value;
+            const newP = document.getElementById('cp-new').value;
+            const confP = document.getElementById('cp-confirm').value;
+
+            if(!oldP || !newP || !confP) { showToast('Please fill all password fields', 'error'); return; }
+            if(newP !== confP) { showToast('New passwords do not match!', 'error'); return; }
+            if(newP.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch('/api/user/password', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                    body: JSON.stringify({ old_password: oldP, new_password: newP })
+                });
+
+                if(res.ok) {
+                    showToast('Password updated successfully! 🔐', 'success');
+                    closeProfileModal();
+                } else {
+                    const err = await res.json();
+                    showToast(err.detail || 'Failed to update password', 'error');
+                }
+            } catch(e) { showToast('Connection Error', 'error'); }
         }
 
         // Start
