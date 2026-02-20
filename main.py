@@ -62,7 +62,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # Telegram
-bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN, in_memory=True)
+bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # --- Models ---
 class CreateFolderRequest(BaseModel):
@@ -381,20 +381,17 @@ async def delete_item(uid: str, type: str, token: str = Depends(oauth2_scheme)):
     if not user: 
         raise HTTPException(status_code=401, detail="Unauthorized")
     
-    if type == "folder":
-        # အသစ်ထည့်လိုက်တဲ့ Recursive Function ကို အရင်ခေါ်မယ်
-        # ဒါက Folder ထဲက အရာအားလုံးကို ရှင်းပေးလိမ့်မယ်
-        await delete_recursive(uid, user["username"])
-        
-        # ပြီးမှ မိခင် Folder ကြီးကို ဖျက်မယ်
-        result = await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
-
-    elif type == "file":
-        # File ဆိုရင်တော့ ပုံမှန်အတိုင်း တစ်ခုတည်း ဖျက်မယ်
-        result = await files_collection.delete_one({"uid": uid, "owner": user["username"]})
+    result = None # ဒီနေရာမှာ ကြိုကြေညာပေးထားပါ
     
-    # ဖျက်စရာမတွေ့ရင် Error ပြမယ်
-    if result.deleted_count == 0:
+    if type == "folder":
+        await delete_recursive(uid, user["username"])
+        result = await folders_collection.delete_one({"uid": uid, "owner": user["username"]})
+    elif type == "file":
+        result = await files_collection.delete_one({"uid": uid, "owner": user["username"]})
+    else:
+        raise HTTPException(status_code=400, detail="Invalid type")
+    
+    if result and result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
         
     return {"message": "Deleted successfully"}
@@ -527,4 +524,5 @@ async def batch_move(req: BatchMoveRequest, token: str = Depends(oauth2_scheme))
     return {"message": f"Moved {moved_count} items"}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
