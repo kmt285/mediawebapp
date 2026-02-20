@@ -638,7 +638,6 @@ async function pasteItem() {
                         <div id="card-${f.uid}" 
                              onclick="enterFolder('${f.uid}', '${f.name}')" 
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
-                            // ပြင်ပြီး Code (Folder section)
                             <div id="check-icon-${f.uid}" 
                                  onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'folder')"
                                  class="absolute top-2 left-2 z-10 rounded-full shadow-md w-7 h-7 flex items-center justify-center transition-all ${checkVisible}">
@@ -667,7 +666,6 @@ async function pasteItem() {
                         <div id="card-${f.uid}" 
                              onclick="window.open('/view/${f.uid}', '_blank')" 
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
-                            // ပြင်ပြီး Code (File section)
                             <div id="check-icon-${f.uid}" 
                                  onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'file')"
                                  class="absolute top-2 left-2 z-10 rounded-full shadow-md w-7 h-7 flex items-center justify-center transition-all ${checkVisible}">
