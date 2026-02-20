@@ -236,7 +236,10 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
     user = await get_current_user(token)
     
     # Telegram Upload Setup
-    target_id = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
+    try:
+    target_id = int(CHANNEL_ID_STR)
+except ValueError:
+    target_id = CHANNEL_ID_STR
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
@@ -313,14 +316,16 @@ async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None
 
     if q:
         query["filename"] = {"$regex": q, "$options": "i"} 
+        # Search လုပ်ရင် Folder ကိုပါ ရှာဖို့ ထည့်ပေးရပါမယ်
+        folder_query = {"name": {"$regex": q, "$options": "i"}, "owner": user["username"]}
     else:
         query["parent_id"] = None if folder_id == "root" else folder_id
+        folder_query = {"owner": user["username"], "parent_id": query.get("parent_id")}
 
     folders = []
-    if not q:
-        folder_query = {"owner": user["username"], "parent_id": query.get("parent_id")}
-        async for f in folders_collection.find(folder_query).sort("name", 1):
-            folders.append({"uid": f["uid"], "name": f["name"], "type": "folder"})
+    # if not q: ကို ဖြုတ်လိုက်ပါမည်
+    async for f in folders_collection.find(folder_query).sort("name", 1):
+        folders.append({"uid": f["uid"], "name": f["name"], "type": "folder"})
     
     files = []
     async for f in files_collection.find(query).sort("upload_date", -1):
@@ -370,9 +375,8 @@ async def move_item(req: MoveRequest, token: str = Depends(oauth2_scheme)):
         {"$set": {"parent_id": new_parent}}
     )
     
-    if result.modified_count == 0:
-        raise HTTPException(status_code=400, detail="Item not found or move failed")
-
+    if result.matched_count == 0: # modified အစား matched ကိုသုံးပါ
+        raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Moved successfully"}
 
 @app.delete("/api/delete/{uid}")
