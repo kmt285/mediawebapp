@@ -426,13 +426,31 @@ async function pasteItem() {
                 // Deselect လုပ်ခြင်း
                 selectedItems.delete(key);
                 card.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/50');
-                if(checkIcon) checkIcon.classList.add('hidden');
+                if(checkIcon) {
+                    checkIcon.classList.remove('opacity-100', 'text-blue-500', 'bg-white');
+                    checkIcon.classList.add('opacity-40', 'text-gray-400', 'bg-gray-800');
+                }
             } else {
                 // Select လုပ်ခြင်း
                 selectedItems.add(key);
                 card.classList.add('ring-2', 'ring-blue-500', 'bg-blue-900/50');
-                if(checkIcon) checkIcon.classList.remove('hidden');
+                if(checkIcon) {
+                    checkIcon.classList.remove('opacity-40', 'text-gray-400', 'bg-gray-800');
+                    checkIcon.classList.add('opacity-100', 'text-blue-500', 'bg-white');
+                }
             }
+            updateBatchUI();
+        }
+
+        function clearSelection() {
+            selectedItems.clear();
+            document.querySelectorAll('.item-card').forEach(el => {
+                el.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-900/50');
+            });
+            document.querySelectorAll('[id^="check-icon-"]').forEach(el => {
+                el.classList.remove('opacity-100', 'text-blue-500', 'bg-white');
+                el.classList.add('opacity-40', 'text-gray-400', 'bg-gray-800');
+            });
             updateBatchUI();
         }
 
@@ -606,18 +624,23 @@ async function pasteItem() {
                 data.folders.forEach(f => {
                     const isSelected = selectedItems.has(`${f.uid}|folder`);
                     const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/50' : '';
-                    const checkVisible = isSelected ? '' : 'hidden';
+                    // Select မလုပ်ထားရင် မှိန်နေမယ်၊ လုပ်ထားရင် လင်းနေမယ်
+                    const checkVisible = isSelected ? 'opacity-100 text-blue-500 bg-white' : 'opacity-40 text-gray-400 bg-gray-800 hover:opacity-100';
 
-                    // onclick နဲ့ ondblclick ကို main div ပေါ်မှာပဲ တိုက်ရိုက်ခွဲထားပါတယ်
                     grid.innerHTML += `
                         <div id="card-${f.uid}" 
-                             onclick="toggleSelect('${f.uid}', 'folder')" 
-                             ondblclick="enterFolder('${f.uid}', '${f.name}')" 
-                             oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'folder')" 
+                             onclick="enterFolder('${f.uid}', '${f.name}')" 
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
                             
-                            <div id="check-icon-${f.uid}" class="absolute top-2 left-2 text-blue-500 ${checkVisible} z-10 bg-white rounded-full leading-none shadow-md">
+                            <div id="check-icon-${f.uid}" 
+                                 onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'folder')"
+                                 class="absolute top-2 left-2 z-10 rounded-full leading-none shadow-md p-1 transition-all ${checkVisible}">
                                 <i class="fas fa-check-circle text-xl"></i>
+                            </div>
+                            
+                            <div onclick="event.stopPropagation(); openContextMenu(event, '${f.uid}', '${f.name}', 'folder')"
+                                 class="absolute top-2 right-2 z-10 text-gray-400 hover:text-white px-2 py-1">
+                                <i class="fas fa-ellipsis-v text-lg"></i>
                             </div>
                             
                             <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md pointer-events-none"></i>
@@ -629,7 +652,7 @@ async function pasteItem() {
                 data.files.forEach(f => {
                     const isSelected = selectedItems.has(`${f.uid}|file`);
                     const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/50' : '';
-                    const checkVisible = isSelected ? '' : 'hidden';
+                    const checkVisible = isSelected ? 'opacity-100 text-blue-500 bg-white' : 'opacity-40 text-gray-400 bg-gray-800 hover:opacity-100';
 
                     let displayIcon = f.has_thumb 
                         ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
@@ -637,23 +660,28 @@ async function pasteItem() {
 
                     grid.innerHTML += `
                         <div id="card-${f.uid}" 
-                             onclick="toggleSelect('${f.uid}', 'file')"
-                             ondblclick="window.open('/view/${f.uid}', '_blank')" 
-                             oncontextmenu="openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})" 
+                             onclick="window.open('/view/${f.uid}', '_blank')" 
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
                             
-                            <div id="check-icon-${f.uid}" class="absolute top-2 left-2 text-blue-500 ${checkVisible} z-10 bg-white rounded-full leading-none shadow-md">
+                            <div id="check-icon-${f.uid}" 
+                                 onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'file')"
+                                 class="absolute top-2 left-2 z-10 rounded-full leading-none shadow-md p-1 transition-all ${checkVisible}">
                                 <i class="fas fa-check-circle text-xl"></i>
                             </div>
 
-                            <div class="w-full h-full flex flex-col items-center justify-between pointer-events-none">
+                            <div onclick="event.stopPropagation(); openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})"
+                                 class="absolute top-2 right-2 z-10 text-gray-400 hover:text-white px-2 py-1">
+                                <i class="fas fa-ellipsis-v text-lg"></i>
+                            </div>
+
+                            <div class="w-full h-full flex flex-col items-center justify-between pointer-events-none mt-2">
                                 ${displayIcon}
                                 <div class="w-full text-center mt-auto">
                                     <p class="text-xs text-gray-200 truncate w-full font-medium">${f.name}</p>
                                     <p class="text-[10px] text-gray-500 mt-0.5">${f.size}</p>
                                 </div>
                             </div>
-                            ${f.has_password ? '<div class="absolute top-2 right-2 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
+                            ${f.has_password ? '<div class="absolute top-2 right-8 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
                         </div>`;
                 });
                 
@@ -888,23 +916,24 @@ async function driveUpload(files) {
 
         function openContextMenu(e, uid, name, type, hasPwd=false) {
             e.preventDefault(); 
+            e.stopPropagation(); // Parent ကို click မရောက်အောင် တားမယ်
             selectedItem = { uid, name, type, hasPwd };
 
             const menu = document.getElementById('context-menu');
             
-            // Mouse Position
-            let x = e.pageX;
-            let y = e.pageY;
+            // Mouse Position (သို့) Touch Position ကို ယူမယ်
+            let x = e.pageX || (e.touches && e.touches[0].pageX) || e.clientX;
+            let y = e.pageY || (e.touches && e.touches[0].pageY) || e.clientY;
             
             // Screen အစွန်းထွက်မသွားအောင် ထိန်းညှိခြင်း
-            if(x + 200 > window.innerWidth) x = x - 200;
-            if(y + 300 > window.innerHeight) y = y - 300;
+            if(x + 200 > window.innerWidth) x = window.innerWidth - 210;
+            if(y + 300 > window.innerHeight) y = window.innerHeight - 310;
 
             menu.style.left = `${x}px`;
             menu.style.top = `${y}px`;
             menu.classList.remove('hidden');
         }
-
+        
         // Close menu on click elsewhere
         document.addEventListener('click', () => {
             document.getElementById('context-menu').classList.add('hidden');
