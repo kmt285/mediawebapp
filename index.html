@@ -168,6 +168,9 @@
     <div id="register-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
         <div class="glass p-8 rounded-xl w-80 shadow-2xl">
             <h2 class="text-xl font-bold mb-4 text-green-400">Register</h2>
+            
+            <input id="r-fullname" type="text" placeholder="Full Name" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-green-500 outline-none">
+            
             <input id="r-user" type="text" placeholder="Username" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-green-500 outline-none">
             <input id="r-pass" type="password" placeholder="Password" class="w-full bg-gray-900 p-2 rounded mb-4 border border-gray-600 focus:border-green-500 outline-none">
             
@@ -901,18 +904,21 @@ async function driveUpload(files) {
         }
 
         async function doRegister() {
+            const f = document.getElementById('r-fullname').value.trim(); // Full Name အသစ်
             const u = document.getElementById('r-user').value.trim();
             const p = document.getElementById('r-pass').value.trim();
             
-            // (၁) အလွတ်ဖြစ်နေရင် တားမယ်
-            if(!u || !p) { showToast('Please enter username and password', 'error'); return; }
+            // အလွတ်ဖြစ်နေရင် တားမယ်
+            if(!f || !u || !p) { showToast('Please fill all fields', 'error'); return; }
 
-            const params = new URLSearchParams(); params.append('username', u); params.append('password', p);
+            const params = new URLSearchParams(); 
+            params.append('full_name', f); // Backend ကို Full Name ပါ ပို့မယ်
+            params.append('username', u); 
+            params.append('password', p);
             
             try {
                 const res = await fetch('/register', {
                     method: 'POST', 
-                    // (၃) Header အတိအကျ ထည့်ပေးမှ FastAPI က လက်ခံပါမယ်
                     headers: {'Content-Type':'application/x-www-form-urlencoded'},
                     body: params
                 });
@@ -920,9 +926,12 @@ async function driveUpload(files) {
                 if(res.ok) { 
                     showToast('Registration Success! Please Login.'); 
                     toggleModal('register-modal'); 
+                    // Input တွေကို ပြန်ရှင်းပေးမည်
+                    document.getElementById('r-fullname').value = '';
+                    document.getElementById('r-user').value = '';
+                    document.getElementById('r-pass').value = '';
                 }
                 else {
-                    // (၄) Backend က ပို့လိုက်တဲ့ Error အတိအကျကို ဖမ်းပြီး ပြမယ်
                     const err = await res.json();
                     showToast(err.error || err.detail || 'Registration Failed', 'error');
                 }
