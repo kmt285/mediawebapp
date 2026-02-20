@@ -191,10 +191,18 @@ async def home(request: Request):
 
 # Auth
 @app.post("/register")
-async def register(username: str = Form(...), password: str = Form(...)):
+async def register(full_name: str = Form(...), username: str = Form(...), password: str = Form(...)):
+    # Username တူနေတာ ရှိမရှိ စစ်မည်
     if await users_collection.find_one({"username": username}):
         return JSONResponse(status_code=400, content={"error": "Username already taken"})
-    await users_collection.insert_one({"username": username, "password": get_password_hash(password)})
+    
+    # Database ထဲသို့ Full Name ပါ ထည့်သိမ်းမည်
+    await users_collection.insert_one({
+        "full_name": full_name,
+        "username": username, 
+        "password": get_password_hash(password),
+        "created_at": time.time() # Account ဖွင့်တဲ့ အချိန်ပါ မှတ်ထားပေးလိုက်ပါတယ်
+    })
     return {"message": "Success"}
 
 @app.post("/token")
