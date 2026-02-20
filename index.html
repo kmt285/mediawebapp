@@ -1005,6 +1005,33 @@ async function driveUpload(files) {
             }
         });
 
+        // --- GUEST DRAG & DROP UPLOAD LOGIC ---
+        const guestDropzone = document.getElementById('guest-dropzone');
+
+        if (guestDropzone) {
+            guestDropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                // ဖိုင်ဆွဲလာချိန် ဘောင်ကို အပြာရောင်ပြောင်းပြီး Highlight လုပ်မည်
+                guestDropzone.classList.add('border-blue-500', 'bg-gray-800/50');
+            });
+
+            guestDropzone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                // ဖိုင်ပြန်ရွှေ့သွားရင် ပုံမှန်အရောင် ပြန်ထားမည်
+                guestDropzone.classList.remove('border-blue-500', 'bg-gray-800/50');
+            });
+
+            guestDropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                guestDropzone.classList.remove('border-blue-500', 'bg-gray-800/50');
+                
+                // ဖိုင်ချလိုက်တာနဲ့ ပထမဆုံးဖိုင်ကို guestUpload() ထဲ ထည့်ပေးမည်
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    guestUpload(e.dataTransfer.files[0]);
+                }
+            });
+        }
+
         // Start
         init();
     </script>
