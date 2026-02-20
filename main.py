@@ -237,9 +237,9 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
     
     # Telegram Upload Setup
     try:
-    target_id = int(CHANNEL_ID_STR)
-except ValueError:
-    target_id = CHANNEL_ID_STR
+        target_id = int(CHANNEL_ID_STR)
+    except ValueError:
+        target_id = CHANNEL_ID_STR
     file_uid = str(uuid.uuid4())[:8]
     file_loc = f"temp_{file.filename}"
     
