@@ -13,3 +13,4 @@ authlib
 itsdangerous
 httpx
 dnspython
+websockets
