@@ -17,9 +17,9 @@
 <body class="h-screen flex flex-col overflow-hidden">
 
     <nav class="glass p-4 flex justify-between items-center border-b border-gray-700 z-10">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="location.reload()">
-            <i class="fas fa-cloud text-blue-500 text-2xl"></i>
-            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">MyanmarCloud</h1>
+        <div id="auth-user" class="hidden flex items-center gap-4">
+            <span id="username-display" class="text-blue-300 font-medium"></span>
+            <button onclick="promptLogout()" class="text-red-500 hover:text-red-400 text-lg hover:scale-110 transition-all duration-200" title="Log Out"><i class="fas fa-power-off"></i></button>
         </div>
         
         <div id="auth-guest" class="flex gap-2">
@@ -183,6 +183,21 @@
             <button onclick="toggleModal('register-modal')" class="w-full mt-2 text-sm text-gray-400 hover:text-white transition">Cancel</button>
         </div>
     </div>
+
+    <div id="logout-modal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[80] backdrop-blur-sm">
+        <div class="glass p-8 rounded-xl w-80 shadow-2xl text-center transform transition-all">
+            <div class="bg-red-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/50">
+                <i class="fas fa-power-off text-red-500 text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">Log Out?</h3>
+            <p class="text-gray-400 text-sm mb-6">Are you sure you want to log out of MyanmarCloud?</p>
+            <div class="flex gap-3">
+                <button onclick="toggleModal('logout-modal')" class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded font-medium transition">Cancel</button>
+                <button onclick="logout()" class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded font-medium shadow-lg shadow-red-600/30 transition">Log Out</button>
+            </div>
+        </div>
+    </div>
+    
     <div id="toast-box" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-6 py-3 rounded-lg shadow-2xl border border-gray-700 flex items-center gap-3 transition-all duration-300 translate-y-20 opacity-0 z-[70]">
         <i id="toast-icon" class="fas fa-check-circle text-green-400"></i>
         <span id="toast-msg" class="text-sm font-medium">Action Successful</span>
@@ -912,6 +927,11 @@ async function driveUpload(files) {
                     showToast(err.error || err.detail || 'Registration Failed', 'error');
                 }
             } catch(e) { showToast('Connection Error', 'error'); }
+        }
+
+        // --- LOGOUT CONFIRMATION LOGIC ---
+        function promptLogout() {
+            toggleModal('logout-modal');
         }
 
         function logout() { localStorage.clear(); location.reload(); }
