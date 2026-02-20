@@ -637,6 +637,7 @@ async function pasteItem() {
                     htmlContent += `
                         <div id="card-${f.uid}" 
                              onclick="enterFolder('${f.uid}', '${f.name}')" 
+                             oncontextmenu="event.preventDefault(); event.stopPropagation(); openContextMenu(event, '${f.uid}', '${f.name}', 'folder')"
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
                             <div id="check-icon-${f.uid}" 
                                  onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'folder')"
@@ -665,6 +666,7 @@ async function pasteItem() {
                     htmlContent += `
                         <div id="card-${f.uid}" 
                              onclick="window.open('/view/${f.uid}', '_blank')" 
+                             oncontextmenu="event.preventDefault(); event.stopPropagation(); openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})"
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
                             <div id="check-icon-${f.uid}" 
                                  onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'file')"
@@ -805,6 +807,7 @@ async function driveUpload(files) {
         showToast(`All uploads failed. Check connection or file size.`, 'error');
     }
 }
+
 
         // --- NAVIGATION ---
         function enterFolder(uid, name) {
@@ -976,6 +979,31 @@ async function driveUpload(files) {
                     break;
             }
         }
+
+        // --- DRAG & DROP UPLOAD LOGIC ---
+        const dropZone = document.getElementById('view-drive');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            // ဖိုင်ကို Drag လုပ်လာချိန် အပြာရောင်ဘောင်လေးနဲ့ အရောင်ပြောင်းပြမည်
+            dropZone.classList.add('ring-4', 'ring-inset', 'ring-blue-500', 'bg-gray-800/50');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            // ဖိုင်ကို ပြန်ရွှေ့သွားရင် ပုံမှန်အတိုင်း ပြန်ထားမည်
+            dropZone.classList.remove('ring-4', 'ring-inset', 'ring-blue-500', 'bg-gray-800/50');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('ring-4', 'ring-inset', 'ring-blue-500', 'bg-gray-800/50');
+            
+            // ဖိုင်တွေ ချလိုက်တာနဲ့ driveUpload() ကို တန်းခေါ်ပြီး Upload တင်မည်
+            if(e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                driveUpload(e.dataTransfer.files);
+            }
+        });
 
         // Start
         init();
