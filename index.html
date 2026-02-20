@@ -614,8 +614,7 @@ async function pasteItem() {
                 if(res.status === 401) { logout(); return; }
 
                 const data = await res.json();
-                grid.innerHTML = '';
-
+                
                 if(!data.folders.length && !data.files.length) {
                     grid.innerHTML = `
                         <div class="col-span-full flex flex-col items-center justify-center mt-20 text-gray-500 opacity-50">
@@ -626,29 +625,28 @@ async function pasteItem() {
                     return;
                 }
 
+                // --- OPTIMIZATION: HTML တွေကို String တစ်ခုတည်းမှာ အရင်စုပါမည် ---
+                let htmlContent = '';
+
                // Folders Rendering
                 data.folders.forEach(f => {
                     const isSelected = selectedItems.has(`${f.uid}|folder`);
                     const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/50' : '';
-                    // Select မလုပ်ထားရင် မှိန်နေမယ်၊ လုပ်ထားရင် လင်းနေမယ်
                     const checkVisible = isSelected ? 'opacity-100 text-blue-500 bg-white' : 'opacity-40 text-gray-400 bg-gray-800 hover:opacity-100';
 
-                    grid.innerHTML += `
+                    htmlContent += `
                         <div id="card-${f.uid}" 
                              onclick="enterFolder('${f.uid}', '${f.name}')" 
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-center transition shadow-sm h-32 select-none">
-                            
                             <div id="check-icon-${f.uid}" 
                                  onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'folder')"
                                  class="absolute top-2 left-2 z-10 rounded-full leading-none shadow-md p-1 transition-all ${checkVisible}">
                                 <i class="fas fa-check-circle text-xl"></i>
                             </div>
-                            
                             <div onclick="event.stopPropagation(); openContextMenu(event, '${f.uid}', '${f.name}', 'folder')"
                                  class="absolute top-2 right-2 z-10 text-gray-400 hover:text-white px-2 py-1">
                                 <i class="fas fa-ellipsis-v text-lg"></i>
                             </div>
-                            
                             <i class="fas fa-folder text-yellow-400 text-4xl mb-2 drop-shadow-md pointer-events-none"></i>
                             <p class="text-sm text-center text-gray-200 truncate w-full px-2 pointer-events-none">${f.name}</p>
                         </div>`;
@@ -664,22 +662,19 @@ async function pasteItem() {
                         ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
                         : getFileIcon(f.name);
 
-                    grid.innerHTML += `
+                    htmlContent += `
                         <div id="card-${f.uid}" 
                              onclick="window.open('/view/${f.uid}', '_blank')" 
                              class="item-card ${activeClass} bg-gray-800 hover:bg-gray-700 p-4 rounded-xl border border-gray-700 cursor-pointer relative flex flex-col items-center justify-between transition shadow-sm h-32 select-none" title="${f.name}">
-                            
                             <div id="check-icon-${f.uid}" 
                                  onclick="event.stopPropagation(); toggleSelect('${f.uid}', 'file')"
                                  class="absolute top-2 left-2 z-10 rounded-full leading-none shadow-md p-1 transition-all ${checkVisible}">
                                 <i class="fas fa-check-circle text-xl"></i>
                             </div>
-
                             <div onclick="event.stopPropagation(); openContextMenu(event, '${f.uid}', '${f.name}', 'file', ${f.has_password})"
                                  class="absolute top-2 right-2 z-10 text-gray-400 hover:text-white px-2 py-1">
                                 <i class="fas fa-ellipsis-v text-lg"></i>
                             </div>
-
                             <div class="w-full h-full flex flex-col items-center justify-between pointer-events-none mt-2">
                                 ${displayIcon}
                                 <div class="w-full text-center mt-auto">
@@ -690,6 +685,9 @@ async function pasteItem() {
                             ${f.has_password ? '<div class="absolute top-2 right-8 text-yellow-500 text-xs drop-shadow"><i class="fas fa-lock"></i></div>' : ''}
                         </div>`;
                 });
+                
+                // --- OPTIMIZATION: နောက်ဆုံးမှ တစ်ခါတည်း Grid ထဲ ထည့်ပါမည် ---
+                grid.innerHTML = htmlContent;
                 
                 if(!searchQuery) updateBreadcrumbs();
 
