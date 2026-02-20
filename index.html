@@ -479,16 +479,22 @@ async function pasteItem() {
             updateBatchUI();
         }
 
-        // updateBatchUI() ကတော့ အရင်အတိုင်း ထားထားလို့ရပါတယ်
-        function updateBatchUI() {
-            const bar = document.getElementById('batch-bar');
+       function updateBatchUI() {
+            const normalToolbar = document.getElementById('normal-toolbar');
+            const selectionToolbar = document.getElementById('selection-toolbar');
             const count = document.getElementById('batch-count');
             
             if (selectedItems.size > 0) {
-                bar.classList.remove('translate-y-32'); 
+                // Select မှတ်ထားရင် Normal Toolbar ကို ဖျောက်ပြီး Selection Toolbar ကို ပြမယ်
+                normalToolbar.classList.add('opacity-0', 'pointer-events-none');
+                selectionToolbar.classList.remove('hidden');
+                selectionToolbar.classList.add('flex');
                 count.innerText = `${selectedItems.size} Selected`;
             } else {
-                bar.classList.add('translate-y-32'); 
+                // ဘာမှ Select မမှတ်ထားရင် ပုံမှန် Toolbar ကိုပဲ ပြန်ပြမယ်
+                normalToolbar.classList.remove('opacity-0', 'pointer-events-none');
+                selectionToolbar.classList.add('hidden');
+                selectionToolbar.classList.remove('flex');
             }
         }
 
