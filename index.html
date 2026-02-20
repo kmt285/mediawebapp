@@ -570,10 +570,11 @@ async function pasteItem() {
         // --- DRIVE & HELPERS ---
         let searchTimeout;
         function doSearch() {
-            clearTimeout(searchTimeout);
-            const query = document.getElementById('search-box').value;
-            searchTimeout = setTimeout(() => { loadDriveContent(query); }, 500);
-        }
+    clearTimeout(searchTimeout);
+    clearSelection(); // ဒီစာကြောင်း အသစ်ထည့်ပါ
+    const query = document.getElementById('search-box').value;
+    searchTimeout = setTimeout(() => { loadDriveContent(query); }, 500);
+}
 
         function getFileIcon(filename) {
             const ext = filename.split('.').pop().toLowerCase();
@@ -809,11 +810,11 @@ async function driveUpload(files) {
 
         // --- NAVIGATION ---
         function enterFolder(uid, name) {
-            currentFolder = uid;
-            folderHistory.push({id: uid, name: name});
-            loadDriveContent();
-        }
-
+    clearSelection(); // ဒီစာကြောင်း အသစ်ထည့်ပါ
+    currentFolder = uid;
+    folderHistory.push({id: uid, name: name});
+    loadDriveContent();
+}
         function updateBreadcrumbs() {
             const bc = document.getElementById('breadcrumbs');
             bc.innerHTML = folderHistory.map((f, i) => {
