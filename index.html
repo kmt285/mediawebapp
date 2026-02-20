@@ -66,32 +66,53 @@
 
         <div id="view-drive" class="hidden h-full flex flex-col bg-gray-900">
             
-            <div class="bg-gray-800 border-b border-gray-700 p-4 flex flex-wrap justify-between items-center shadow-md z-20 gap-4">
-    
-    <div class="flex items-center gap-2 text-sm text-gray-300 overflow-x-auto whitespace-nowrap" id="breadcrumbs">
-        <span class="font-bold">Home</span>
-    </div>
+            <div class="bg-gray-800 border-b border-gray-700 p-4 shadow-md z-20 relative min-h-[70px] flex items-center">
+                
+                <div id="normal-toolbar" class="w-full flex flex-wrap justify-between items-center gap-4 transition-opacity duration-200">
+                    <div class="flex items-center gap-2 text-sm text-gray-300 overflow-x-auto whitespace-nowrap" id="breadcrumbs">
+                        <span class="font-bold">Home</span>
+                    </div>
 
-    <div class="flex items-center gap-2 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 flex-grow max-w-sm ml-0 sm:ml-4">
-        <i class="fas fa-search text-gray-400"></i>
-        <input type="text" id="search-box" onkeyup="doSearch()" placeholder="Search files..." class="bg-transparent border-none outline-none text-white text-sm w-full transition-all">
-    </div>
+                    <div class="flex items-center gap-2 bg-gray-900 border border-gray-600 rounded px-3 py-1.5 flex-grow max-w-sm ml-0 sm:ml-4">
+                        <i class="fas fa-search text-gray-400"></i>
+                        <input type="text" id="search-box" onkeyup="doSearch()" placeholder="Search files..." class="bg-transparent border-none outline-none text-white text-sm w-full transition-all">
+                    </div>
 
-    <div class="flex gap-3 shrink-0 ml-auto">
-        <button id="paste-btn" onclick="pasteItem()" class="hidden bg-purple-600 hover:bg-purple-700 border border-purple-500 text-white px-3 py-2 rounded flex items-center gap-2 transition animate-pulse">
-            <i class="fas fa-paste"></i> <span>Paste Here</span>
-        </button>
-        <button onclick="cancelPaste()" id="cancel-paste-btn" class="hidden bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded ml-2 transition" title="Cancel Move">
-            <i class="fas fa-times"></i>
-        </button>
-        <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
-            <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
-        </button>
-        <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
-            <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
-            <input type="file" id="drive-file" class="hidden" multiple onchange="driveUpload(this.files)">
-        </label>
-    </div>
+                    <div class="flex gap-3 shrink-0 ml-auto">
+                        <button id="paste-btn" onclick="pasteItem()" class="hidden bg-purple-600 hover:bg-purple-700 border border-purple-500 text-white px-3 py-2 rounded flex items-center gap-2 transition animate-pulse">
+                            <i class="fas fa-paste"></i> <span>Paste Here</span>
+                        </button>
+                        <button onclick="cancelPaste()" id="cancel-paste-btn" class="hidden bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded ml-2 transition" title="Cancel Move">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
+                            <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
+                        </button>
+                        <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
+                            <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
+                            <input type="file" id="drive-file" class="hidden" multiple onchange="driveUpload(this.files)">
+                        </label>
+                    </div>
+                </div>
+
+                <div id="selection-toolbar" class="hidden absolute inset-0 bg-blue-900/95 backdrop-blur-sm z-30 justify-between items-center px-4 md:px-6 transition-opacity duration-200">
+                    <div class="flex items-center gap-4">
+                        <button onclick="clearSelection()" class="text-white hover:text-gray-300 transition p-2" title="Clear Selection">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                        <span id="batch-count" class="font-bold text-lg text-white">0 Selected</span>
+                    </div>
+                    <div class="flex items-center gap-2 sm:gap-4">
+                        <button onclick="batchAction('move')" class="flex items-center gap-2 bg-transparent hover:bg-white/10 text-white px-3 sm:px-4 py-2 rounded transition" title="Move Selected">
+                            <i class="fas fa-scissors"></i> <span class="hidden sm:inline font-medium">Cut</span>
+                        </button>
+                        <button onclick="batchAction('delete')" class="flex items-center gap-2 bg-transparent hover:bg-red-500/20 text-red-300 hover:text-red-200 px-3 sm:px-4 py-2 rounded transition" title="Delete Selected">
+                            <i class="fas fa-trash"></i> <span class="hidden sm:inline font-medium">Delete</span>
+                        </button>
+                    </div>
+                </div>
+                
+            </div>
 
 </div>
             <div id="drive-progress" class="hidden w-full h-1 bg-gray-800">
@@ -189,14 +210,6 @@
         <button onclick="menuAction('download')" class="w-full text-left px-4 py-2 hover:bg-gray-700 text-sm text-white"><i class="fas fa-download w-5"></i> Download</button>
         <div class="border-t border-gray-600 my-1"></div>
         <button onclick="menuAction('delete')" class="w-full text-left px-4 py-2 hover:bg-red-900/50 text-sm text-red-400"><i class="fas fa-trash w-5"></i> Delete</button>
-        
-        <div id="batch-bar" class="fixed bottom-5 left-1/2 transform -translate-x-1/2 bg-blue-900/90 backdrop-blur border border-blue-500 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 transition-all duration-300 translate-y-32 z-[80]">
-        <span id="batch-count" class="font-bold text-blue-200">0 Selected</span>
-        <div class="h-6 w-px bg-blue-700"></div>
-        <button onclick="batchAction('move')" class="hover:text-yellow-400 transition" title="Move Selected"><i class="fas fa-scissors"></i> Cut</button>
-        <button onclick="batchAction('delete')" class="hover:text-red-400 transition" title="Delete Selected"><i class="fas fa-trash"></i> Delete</button>
-        <div class="h-6 w-px bg-blue-700"></div>
-        <button onclick="clearSelection()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
     </div>
 
 
