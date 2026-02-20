@@ -96,6 +96,10 @@ class BatchMoveRequest(BaseModel):
     items: List[BatchItem]
     target_parent_id: str
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
 # --- Helpers ---
 def get_password_hash(password): return pwd_context.hash(password)
 def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
@@ -485,6 +489,40 @@ def get_password_prompt_html(uid: str, action: str, error: str = ""):
     </body>
     </html>
     """
+
+# --- User Profile API ---
+@app.get("/api/user/profile")
+async def get_user_profile(token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    
+    return {
+        "username": user["username"],
+        "full_name": user.get("full_name", ""),
+        "created_at": user.get("created_at", time.time()) # အကောင့်ဟောင်းတွေအတွက် Fallback
+    }
+
+@app.put("/api/user/password")
+async def update_user_password(req: ChangePasswordRequest, token: str = Depends(oauth2_scheme)):
+    user = await get_current_user(token)
+    if not user: raise HTTPException(status_code=401)
+    
+    # Google နဲ့ ဝင်ထားတဲ့ အကောင့်ဆိုရင် Password ပြောင်းလို့မရအောင် တားမည်
+    if user.get("auth_type") == "google":
+        raise HTTPException(status_code=400, detail="Cannot change password for Google linked accounts")
+        
+    # Password အဟောင်း မှန်/မမှန် စစ်မည်
+    if not verify_password(req.old_password, user["password"]):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+        
+    # Password အသစ်ကို Hash လုပ်ပြီး Database မှာ Update လုပ်မည်
+    hashed_new = get_password_hash(req.new_password)
+    await users_collection.update_one(
+        {"username": user["username"]},
+        {"$set": {"password": hashed_new}}
+    )
+    return {"message": "Password updated successfully"}
+    
 
 # --- File Access Routes (Protected) ---
 @app.get("/dl/{uid}")
