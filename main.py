@@ -31,6 +31,8 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 MAX_FILE_SIZE = 50 * 1024 * 1024
+mongo_client = AsyncIOMotorClient(MONGO_URL, maxPoolSize=50) 
+db = mongo_client["fileshare_db"]
 
 # --- Setup ---
 app = FastAPI()
@@ -164,8 +166,19 @@ async def startup():
         cid = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
         await bot.get_chat(cid)
         print("✅ Connected to Telegram Channel")
+        
+        # --- OPTIMIZATION: Create Database Indexes ---
+        # User တစ်ယောက်ချင်းစီရဲ့ file တွေကို အမြန်ရှာနိုင်ဖို့
+        await files_collection.create_index([("owner", 1), ("parent_id", 1)])
+        await folders_collection.create_index([("owner", 1), ("parent_id", 1)])
+        
+        # UID နဲ့ အမြန်ရှာနိုင်ဖို့
+        await files_collection.create_index("uid", unique=True)
+        await folders_collection.create_index("uid", unique=True)
+        
+        print("✅ MongoDB Indexes verified")
     except Exception as e:
-        print(f"❌ Telegram Error: {e}")
+        print(f"❌ Telegram/MongoDB Error: {e}")
 
 @app.on_event("shutdown")
 async def shutdown(): await bot.stop()
@@ -284,11 +297,11 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
         return JSONResponse(status_code=500, content={"error": str(e)})
     # --- 50MB CHECK LOGIC END ---
     
+    # Telegram Upload Setup အောက်နားကနေစပြီး အစားထိုးရန်
     try:
         # Telegram ကို ပို့တဲ့အပိုင်း (မူရင်းအတိုင်း)
         msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
-        if os.path.exists(file_loc): os.remove(file_loc)
-
+        
         # Thumbnail ယူခြင်း
         thumb_id = None
         if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
@@ -309,8 +322,16 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
 
     except Exception as e:
-        if os.path.exists(file_loc): os.remove(file_loc)
         return JSONResponse(status_code=500, content={"error": str(e)})
+        
+    finally:
+        # --- OPTIMIZATION: Error တက်သည်ဖြစ်စေ၊ အောင်မြင်သည်ဖြစ်စေ File ကို သေချာဖျက်ပေးမည် ---
+        if os.path.exists(file_loc): 
+            try:
+                os.remove(file_loc)
+            except Exception:
+                pass
+                
         
 # Drive API (User Only)
 @app.post("/api/folder")
