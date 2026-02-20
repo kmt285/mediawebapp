@@ -134,6 +134,26 @@ async def delete_recursive(folder_uid: str, owner: str):
 
     # 4. နောက်ဆုံးမှ Folder တွေကို ဖျက်မယ်
     await folders_collection.delete_many({"parent_id": folder_uid, "owner": owner})
+    
+
+async def is_descendant(target_uid: str, moving_folder_uid: str, owner: str) -> bool:
+    """
+    Target Folder သည် Moving Folder ၏ Sub-folder ဖြစ်နေသလား စစ်ဆေးရန်။
+    True ပြန်လာပါက Circular Move ဖြစ်သည်။
+    """
+    current_id = target_uid
+    while current_id and current_id != "root":
+        # Target ရဲ့ အထက်တစ်နေရာရာမှာ Moving Folder ရှိနေရင် Circular Move မိသွားပြီ
+        if current_id == moving_folder_uid:
+            return True
+        
+        # Parent ကို ဆက်ရှာရန် Database ထဲက ဆွဲထုတ်မည်
+        current_folder = await folders_collection.find_one({"uid": current_id, "owner": owner})
+        if not current_folder:
+            break
+        current_id = current_folder.get("parent_id")
+        
+    return False
 
 # --- Startup ---
 @app.on_event("startup")
@@ -361,9 +381,17 @@ async def move_item(req: MoveRequest, token: str = Depends(oauth2_scheme)):
         if not target: 
             raise HTTPException(status_code=404, detail="Destination folder not found or access denied")
         
-    # ကိုယ့် Folder ကို ကိုယ့်ထဲပြန်ထည့်လို့မရအောင် ကာကွယ်ခြင်း
-    if req.type == "folder" and req.uid == req.target_parent_id:
-        raise HTTPException(status_code=400, detail="Cannot move folder into itself")
+    # Folder Move လုပ်မည်ဆိုပါက
+    if req.type == "folder":
+        # ၁။ ကိုယ့် Folder ကို ကိုယ့်ထဲပြန်ထည့်လို့မရအောင် ကာကွယ်ခြင်း
+        if req.uid == req.target_parent_id:
+            raise HTTPException(status_code=400, detail="Cannot move folder into itself")
+            
+        # ၂။ Circular Move ဖြစ်မဖြစ် စစ်ဆေးခြင်း (အသစ်ထည့်ထားသောအပိုင်း)
+        if req.target_parent_id != "root":
+            is_circular = await is_descendant(req.target_parent_id, req.uid, user["username"])
+            if is_circular:
+                raise HTTPException(status_code=400, detail="Cannot move a folder into its own sub-folder")
 
     col = folders_collection if req.type == "folder" else files_collection
     
@@ -514,9 +542,17 @@ async def batch_move(req: BatchMoveRequest, token: str = Depends(oauth2_scheme))
 
     moved_count = 0
     for item in req.items:
-        # ကိုယ့်အထဲကိုယ် ပြန်မထည့်မိအောင် စစ်မယ်
-        if item.type == "folder" and item.uid == req.target_parent_id:
-            continue
+        # Folder Move အတွက် စစ်ဆေးချက်များ
+        if item.type == "folder":
+            # ၁။ ကိုယ့်အထဲကိုယ် ပြန်မထည့်မိအောင် စစ်မယ်
+            if item.uid == req.target_parent_id:
+                continue
+                
+            # ၂။ Circular Move ဖြစ်နေရင် ဒီ item ကို Move မလုပ်ဘဲ ကျော်သွားမယ်
+            if req.target_parent_id != "root":
+                is_circular = await is_descendant(req.target_parent_id, item.uid, user["username"])
+                if is_circular:
+                    continue # Circular ဖြစ်နေရင် မရွှေ့ဘဲ နောက်တစ်ဖိုင်ကို ဆက်သွားမယ်
 
         col = folders_collection if item.type == "folder" else files_collection
         res = await col.update_one(
