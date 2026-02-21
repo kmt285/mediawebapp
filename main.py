@@ -11,7 +11,7 @@ from authlib.integrations.starlette_client import OAuth
 from starlette.config import Config
 from starlette.middleware.sessions import SessionMiddleware
 
-from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body
+from fastapi import FastAPI, UploadFile, File, Request, HTTPException, Depends, Form, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -288,32 +288,10 @@ async def auth_google(request: Request):
     except Exception as e:
         return HTMLResponse(content=f"<p style='color:red'>Auth Error: {str(e)}</p>")
 
-# Upload (Hybrid: Guest & User) - Secure Disk Buffer Streaming
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
-    user = await get_current_user(token)
-    
+# --- Background Upload Task ---
+async def upload_to_telegram_background(temp_file_path: str, file_uid: str, target_id: int):
     try:
-        target_id = int(CHANNEL_ID_STR)
-    except ValueError:
-        target_id = CHANNEL_ID_STR
-        
-    file_uid = str(uuid.uuid4())[:8]
-    
-    # File Size Limit စစ်ဆေးခြင်း
-    if file.size and file.size > MAX_FILE_SIZE:
-        return JSONResponse(status_code=413, content={"error": f"File too large. Maximum limit is {MAX_FILE_SIZE/1024/1024}MB."})
-        
-    # ယာယီသိမ်းမည့် ဖိုင်နာမည်
-    temp_file_path = f"temp_{file_uid}_{file.filename}"
-    
-    try:
-        # ၁။ File ကို Local Disk ပေါ်သို့ Async စနစ်ဖြင့် ရေးမည် (Server လေးလံမှု မရှိစေရန်)
-        async with aiofiles.open(temp_file_path, 'wb') as out_file:
-            while content := await file.read(1024 * 1024):  # 1MB per chunk
-                await out_file.write(content)
-        
-        # ၂။ Telegram ဆီသို့ ပို့မည် (File Path အတိအကျကို သုံးလိုက်ပါသည်)
+        # နောက်ကွယ်မှ Telegram သို့ ပို့မည်
         msg = await bot.send_document(
             chat_id=target_id, 
             document=temp_file_path,
@@ -321,39 +299,81 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
             force_document=True
         )
         
-        # Thumbnail ယူခြင်း
         thumb_id = None
         if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
             thumb_id = msg.document.thumbs[0].file_id
 
-        # Thumbnail ယူခြင်း ပြီးသွားတဲ့ နေရာအောက်တွင် ...
+        # Telegram ပေါ်ရောက်သွားမှ Database တွင် လိုအပ်သည်များ Update ပြန်လုပ်မည်
+        await files_collection.update_one(
+            {"uid": file_uid},
+            {"$set": {
+                "file_id": msg.document.file_id,
+                "message_id": msg.id,
+                "thumb_id": thumb_id,
+                "sync_status": "completed"
+            }}
+        )
+    except Exception as e:
+        print(f"Background Sync Error: {e}")
+        await files_collection.update_one({"uid": file_uid}, {"$set": {"sync_status": "failed"}})
+    finally:
+        # အားလုံးပြီးဆုံးသွားမှ Local Temp File ကို ဖျက်မည်
+        if os.path.exists(temp_file_path):
+            try: os.remove(temp_file_path)
+            except: pass
+
+# Upload (Background Syncing)
+@app.post("/upload")
+async def upload_file(
+    background_tasks: BackgroundTasks,  # Background Tasks ကို ခေါ်သုံးထားသည်
+    file: UploadFile = File(...), 
+    token: Optional[str] = Form(None), 
+    parent_id: Optional[str] = Form(None)
+):
+    user = await get_current_user(token)
+    try: target_id = int(CHANNEL_ID_STR)
+    except ValueError: target_id = CHANNEL_ID_STR
+        
+    file_uid = str(uuid.uuid4())[:8]
+    if file.size and file.size > MAX_FILE_SIZE:
+        return JSONResponse(status_code=413, content={"error": f"File too large."})
+        
+    temp_file_path = f"temp_{file_uid}_{file.filename}"
+    
+    try:
+        # ၁။ Local Disk သို့ အရင်ရေးမည် (UI တွင် အမြန်ဆုံး ပြီးမြောက်ရန်)
+        async with aiofiles.open(temp_file_path, 'wb') as out_file:
+            while content := await file.read(1024 * 1024):
+                await out_file.write(content)
+        
+        actual_size = os.path.getsize(temp_file_path)
+        
+        # ၂။ Database သို့ Processing အနေဖြင့် ယာယီသိမ်းမည်
         file_data = {
             "uid": file_uid,
-            "message_id": msg.id,         # <--- 🌟 🌟 ဒီစာကြောင်း အသစ်တိုးလိုက်ပါ 🌟 🌟
-            "file_id": msg.document.file_id,
             "filename": file.filename,
-            "size": getattr(msg.document, "file_size", file.size),
+            "size": actual_size,
             "upload_date": time.time(),
             "owner": user["username"] if user else None,
             "parent_id": parent_id if (user and parent_id != "root") else None,
-            "thumb_id": thumb_id
+            "sync_status": "processing" # <-- မှတ်သားထားမည်
         }
         await files_collection.insert_one(file_data)
         
+        # ၃။ Telegram သို့ တင်သည့်အလုပ်ကို Background သို့ လွှဲပေးလိုက်မည်
+        background_tasks.add_task(upload_to_telegram_background, temp_file_path, file_uid, target_id)
+        
+        # ၄။ User ကို စောင့်ခိုင်းစရာမလိုဘဲ UI ဆီသို့ ချက်ချင်း Success ပြန်ပို့မည်
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
 
     except Exception as e:
         print(f"Upload Error: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
-        
-    finally:
-        # ၃။ Telegram ကို ပို့ပြီးသည်နှင့် (သို့မဟုတ် Error တက်သည်နှင့်) Local Temp File ကို ချက်ချင်းဖျက်မည်
-        file.file.close()
         if os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except Exception:
-                pass
+            try: os.remove(temp_file_path)
+            except: pass
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        file.file.close()
         
 # Drive API (User Only)
 @app.post("/api/folder")
@@ -539,6 +559,9 @@ async def update_user_password(req: ChangePasswordRequest, token: str = Depends(
 async def download_file(uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
     if not file_data: raise HTTPException(status_code=404, detail="File not found")
+    # Processing ဖြစ်နေလျှင် စောင့်ခိုင်းမည်
+    if file_data.get("sync_status") == "processing":
+        return HTMLResponse(content="<div style='text-align:center; padding: 50px; color: white; background: #111827; height: 100vh; font-family:sans-serif;'><h2>⏳ Syncing to Cloud...</h2><p style='color: #9ca3af;'>Please wait a few minutes for the background upload to finish.</p></div>", status_code=202)
     
     req_pwd = file_data.get("share_password")
     if req_pwd:
@@ -568,6 +591,9 @@ async def download_file(uid: str, pwd: Optional[str] = None):
 async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
     if not file_data: raise HTTPException(status_code=404, detail="File not found")
+    # Processing ဖြစ်နေလျှင် စောင့်ခိုင်းမည်
+    if file_data.get("sync_status") == "processing":
+        return HTMLResponse(content="<div style='text-align:center; padding: 50px; color: white; background: #111827; height: 100vh; font-family:sans-serif;'><h2>⏳ Syncing to Cloud...</h2><p style='color: #9ca3af;'>Please wait a few minutes for the background upload to finish.</p></div>", status_code=202)
     
     req_pwd = file_data.get("share_password")
     if req_pwd:
