@@ -778,11 +778,14 @@ async function pasteItem() {
             showToast('Copied to Clipboard');
         }
 
-        async function loadDriveContent(searchQuery = "") {
+        async function loadDriveContent(searchQuery = "", isBackground = false) {
             const grid = document.getElementById('drive-grid');
             const token = localStorage.getItem('token');
             
-            grid.innerHTML = '<div class="col-span-full flex justify-center mt-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i></div>';
+            // Background Refresh မဟုတ်မှသာ Loading Spinner ပြမည်
+            if (!isBackground) {
+                grid.innerHTML = '<div class="col-span-full flex justify-center mt-10"><i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i></div>';
+            }
             
             try {
                 let url = `/api/content?folder_id=${currentFolder}`;
@@ -968,7 +971,7 @@ async function pasteItem() {
                     if (isSuccess) {
                         successCount++;
                         // --- ပြင်ဆင်ချက်: ဖိုင်တစ်ခု တင်ပြီးတာနဲ့ 100% ပြည့်ရင် ချက်ချင်း UI ကို Refresh လုပ်မည် ---
-                        loadDriveContent(); 
+                        loadDriveContent("", true);
                     } else {
                         failCount++;
                     }
@@ -990,7 +993,7 @@ async function pasteItem() {
             if (successCount > 0) {
                 // အားလုံးပြီးသွားရင် နောက်ဆုံးအကြိမ် ထပ်ပြီး Refresh လုပ်ပေးမည်
                 showToast(`Upload Complete: ${successCount} success, ${failCount} failed`, 'success');
-                loadDriveContent(); 
+                loadDriveContent("", true);
             } else {
                 showToast(`All uploads failed.`, 'error');
             }
