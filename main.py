@@ -33,6 +33,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 MAX_FILE_SIZE = 1100 * 1024 * 1024
+DEFAULT_STORAGE_LIMIT = 15 * 1024 * 1024 * 1024 
 mongo_client = AsyncIOMotorClient(MONGO_URL, maxPoolSize=50) 
 db = mongo_client["fileshare_db"]
 
@@ -122,6 +123,15 @@ async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
         if username is None: return None
         return await users_collection.find_one({"username": username})
     except JWTError: return None
+
+async def get_user_storage_usage(username: str) -> int:
+    """User တစ်ယောက်ချင်းစီ၏ လက်ရှိသုံးထားသော Storage အားလုံးကို ပေါင်းထုတ်ပေးမည့် Function"""
+    pipeline = [
+        {"$match": {"owner": username}},
+        {"$group": {"_id": None, "total_size": {"$sum": "$size"}}}
+    ]
+    result = await files_collection.aggregate(pipeline).to_list(1)
+    return result[0]["total_size"] if result else 0
 
 # --- Helper Functions ---
 # main.py ထဲက delete_recursive function ကို ဒီလိုအစားထိုးပါ
@@ -337,6 +347,16 @@ async def upload_file(
     file_uid = str(uuid.uuid4())[:8]
     if file.size and file.size > MAX_FILE_SIZE:
         return JSONResponse(status_code=413, content={"error": f"File too large."})
+
+    # --- STORAGE LIMIT CHECK ---
+    if user:
+        used_bytes = await get_user_storage_usage(user["username"])
+        # Database တွင် User အတွက် storage_limit သတ်မှတ်ထားခြင်း ရှိမရှိစစ်မည်၊ မရှိပါက Default (15GB) ကိုသုံးမည်
+        limit_bytes = user.get("storage_limit", DEFAULT_STORAGE_LIMIT) 
+        
+        if used_bytes + file.size > limit_bytes:
+            return JSONResponse(status_code=413, content={"error": "Storage Limit Exceeded! Not enough space."})
+    # ---------------------------
         
     temp_file_path = f"temp_{file_uid}_{file.filename}"
     
@@ -526,10 +546,16 @@ async def get_user_profile(token: str = Depends(oauth2_scheme)):
     user = await get_current_user(token)
     if not user: raise HTTPException(status_code=401)
     
+    # Storage Limit နှင့် လက်ရှိသုံးထားသော ပမာဏကို တွက်မည်
+    used_bytes = await get_user_storage_usage(user["username"])
+    limit_bytes = user.get("storage_limit", DEFAULT_STORAGE_LIMIT)
+    
     return {
         "username": user["username"],
         "full_name": user.get("full_name", ""),
-        "created_at": user.get("created_at", time.time()) # အကောင့်ဟောင်းတွေအတွက် Fallback
+        "created_at": user.get("created_at", time.time()),
+        "used_storage": used_bytes,
+        "storage_limit": limit_bytes
     }
 
 @app.put("/api/user/password")
