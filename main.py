@@ -32,7 +32,7 @@ MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
-MAX_FILE_SIZE = 50 * 1024 * 1024
+MAX_FILE_SIZE = 2000 * 1024 * 1024
 mongo_client = AsyncIOMotorClient(MONGO_URL, maxPoolSize=50) 
 db = mongo_client["fileshare_db"]
 
