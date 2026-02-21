@@ -1,5 +1,6 @@
 import os
 import time
+import math
 import uuid
 import uvicorn
 import aiofiles
@@ -25,6 +26,7 @@ from pydantic import BaseModel
 API_ID = os.environ.get("API_ID") 
 API_HASH = os.environ.get("API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+SESSION_STRING = os.environ.get("SESSION_STRING")
 CHANNEL_ID_STR = os.environ.get("CHANNEL_ID") 
 MONGO_URL = os.environ.get("MONGO_URL")
 SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
@@ -64,7 +66,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # Telegram
-bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN)
+if SESSION_STRING:
+    bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, session_string=SESSION_STRING)
+else:
+    bot = Client("my_bot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # --- Models ---
 class CreateFolderRequest(BaseModel):
@@ -539,33 +544,98 @@ async def download_file(uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
     if not file_data: raise HTTPException(status_code=404, detail="File not found")
     
-    # Password စစ်ဆေးခြင်း
     req_pwd = file_data.get("share_password")
     if req_pwd:
         if not pwd: return HTMLResponse(get_password_prompt_html(uid, "dl"))
         if pwd != req_pwd: return HTMLResponse(get_password_prompt_html(uid, "dl", "Incorrect password!"))
 
+    file_size = file_data.get("size", 0)
+    
     async def streamer():
-        async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
-    return StreamingResponse(streamer(), media_type="application/octet-stream", headers={"Content-Disposition": f'attachment; filename="{file_data["filename"]}"'})
+        try:
+            async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
+        except Exception as e:
+            print(f"Download Error: {e}")
+            
+    headers = {"Content-Disposition": f'attachment; filename="{file_data["filename"]}"'}
+    if file_size: headers["Content-Length"] = str(file_size)
+    
+    return StreamingResponse(streamer(), media_type="application/octet-stream", headers=headers)
 
 @app.get("/view/{uid}")
-async def view_file(uid: str, pwd: Optional[str] = None):
+async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
     file_data = await files_collection.find_one({"uid": uid})
     if not file_data: raise HTTPException(status_code=404, detail="File not found")
     
-    # Password စစ်ဆေးခြင်း
     req_pwd = file_data.get("share_password")
     if req_pwd:
         if not pwd: return HTMLResponse(get_password_prompt_html(uid, "view"))
         if pwd != req_pwd: return HTMLResponse(get_password_prompt_html(uid, "view", "Incorrect password!"))
 
-    mime_type, _ = mimetypes.guess_type(file_data["filename"])
+    filename = file_data["filename"]
+    file_size = file_data.get("size", 0)
+    file_id = file_data["file_id"]
+    
+    mime_type, _ = mimetypes.guess_type(filename)
     if not mime_type: mime_type = "application/octet-stream"
     
-    async def streamer():
-        async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
-    return StreamingResponse(streamer(), media_type=mime_type, headers={"Content-Disposition": f'inline; filename="{file_data["filename"]}"'})
+    # --- Range Request Logic for Video Playback ---
+    range_header = request.headers.get("Range")
+    
+    if range_header and file_size > 0:
+        byte1, byte2 = 0, None
+        match = range_header.replace("bytes=", "").split("-")
+        if match[0]: byte1 = int(match[0])
+        if match[1]: byte2 = int(match[1])
+        else: byte2 = file_size - 1
+
+        length = byte2 - byte1 + 1
+        chunk_size = 1048576 # 1MB (Pyrogram Default Chunk Size)
+        offset_chunks = byte1 // chunk_size
+        limit_chunks = math.ceil(length / chunk_size)
+        
+        async def range_streamer():
+            first_chunk_offset = byte1 % chunk_size
+            bytes_to_send = length
+            
+            try:
+                async for chunk in bot.stream_media(file_id, offset=offset_chunks, limit=limit_chunks):
+                    if not chunk: break
+                    if first_chunk_offset > 0:
+                        chunk = chunk[first_chunk_offset:]
+                        first_chunk_offset = 0
+                    if len(chunk) > bytes_to_send:
+                        chunk = chunk[:bytes_to_send]
+                    
+                    yield chunk
+                    bytes_to_send -= len(chunk)
+                    if bytes_to_send <= 0: break
+            except Exception as e:
+                print(f"Streaming Error: {e}")
+
+        headers = {
+            "Content-Range": f"bytes {byte1}-{byte2}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(length),
+            "Content-Type": mime_type,
+        }
+        return StreamingResponse(range_streamer(), status_code=206, headers=headers)
+        
+    else:
+        async def streamer():
+            try:
+                async for chunk in bot.stream_media(file_id): yield chunk
+            except Exception as e:
+                print(f"Streaming Error: {e}")
+                
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Type": mime_type,
+            "Content-Disposition": f'inline; filename="{filename}"'
+        }
+        if file_size: headers["Content-Length"] = str(file_size)
+        
+        return StreamingResponse(streamer(), headers=headers)
 
 @app.get("/thumb/{uid}")
 async def get_thumbnail(uid: str):
