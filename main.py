@@ -288,44 +288,33 @@ async def auth_google(request: Request):
     except Exception as e:
         return HTMLResponse(content=f"<p style='color:red'>Auth Error: {str(e)}</p>")
 
-# Upload (Hybrid: Guest & User)
+# Upload (Hybrid: Guest & User) - Zero Copy Direct Stream
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(None), parent_id: Optional[str] = Form(None)):
     user = await get_current_user(token)
     
-    # Telegram Upload Setup
     try:
         target_id = int(CHANNEL_ID_STR)
     except ValueError:
         target_id = CHANNEL_ID_STR
+        
     file_uid = str(uuid.uuid4())[:8]
-    file_loc = f"temp_{file.filename}"
     
-    # --- 50MB CHECK LOGIC START ---
-    total_size = 0
+    # --- File Size ကို လွယ်ကူစွာ စစ်ဆေးခြင်း ---
+    # FastAPI မှ file.size ကို အလိုအလျောက် တွက်ချက်ပေးထားပါသည်
+    if file.size and file.size > MAX_FILE_SIZE:
+        return JSONResponse(status_code=413, content={"error": f"File too large. Maximum limit is {MAX_FILE_SIZE/1024/1024}MB."})
+        
     try:
-        async with aiofiles.open(file_loc, "wb") as f:
-            while content := await file.read(1024 * 1024): # 1MB chunks
-                total_size += len(content)
-                
-                # 50MB ကျော်သွားရင် ချက်ချင်းရပ်မယ်
-                if total_size > MAX_FILE_SIZE:
-                    raise HTTPException(status_code=413, detail="File too large. Maximum limit is 50MB.")
-                
-                await f.write(content)
-    except HTTPException as e:
-        # Error တက်ရင် တဝက်တပျက်ဖြစ်နေတဲ့ file ကို ဖျက်မယ်
-        if os.path.exists(file_loc): os.remove(file_loc)
-        return JSONResponse(status_code=e.status_code, content={"error": e.detail})
-    except Exception as e:
-        if os.path.exists(file_loc): os.remove(file_loc)
-        return JSONResponse(status_code=500, content={"error": str(e)})
-    # --- 50MB CHECK LOGIC END ---
-    
-    # Telegram Upload Setup အောက်နားကနေစပြီး အစားထိုးရန်
-    try:
-        # Telegram ကို ပို့တဲ့အပိုင်း (မူရင်းအတိုင်း)
-        msg = await bot.send_document(target_id, file_loc, caption=f"UID: {file_uid}", force_document=True)
+        # --- DIRECT STREAMING LOGIC ---
+        # temp_ file အနေနဲ့ Local Disk မှာ ထပ်မရေးတော့ဘဲ FastAPI က လက်ခံရရှိတဲ့ File Object ကို Telegram ဆီ တိုက်ရိုက်ပို့မည်
+        msg = await bot.send_document(
+            chat_id=target_id, 
+            document=file.file,         # File object ကို တိုက်ရိုက် ထည့်ပေးလိုက်သည်
+            file_name=file.filename,    # Telegram မှ ဖိုင်နာမည်သိစေရန် ထည့်ပေးရသည်
+            caption=f"UID: {file_uid}", 
+            force_document=True
+        )
         
         # Thumbnail ယူခြင်း
         thumb_id = None
@@ -347,16 +336,13 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
         return {"status": "success", "download_url": f"/dl/{file_uid}", "filename": file.filename}
 
     except Exception as e:
+        print(f"Upload Error: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
         
     finally:
-        # --- OPTIMIZATION: Error တက်သည်ဖြစ်စေ၊ အောင်မြင်သည်ဖြစ်စေ File ကို သေချာဖျက်ပေးမည် ---
-        if os.path.exists(file_loc): 
-            try:
-                os.remove(file_loc)
-            except Exception:
-                pass
-                
+        # --- သတိပြုရန် ---
+        # Memory နှင့် Temporary Disk ပြည့်မသွားစေရန် File ကို ပို့ပြီးသည်နှင့် သေချာပြန်ပိတ်ပေးရမည်
+        file.file.close()
         
 # Drive API (User Only)
 @app.post("/api/folder")
