@@ -178,7 +178,7 @@
             
             <input id="r-fullname" type="text" placeholder="Full Name" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-green-500 outline-none">
             
-            <input id="r-user" type="text" placeholder="Username" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-green-500 outline-none">
+            <input id="r-user" type="text" placeholder="Username (a-z, 0-9 only)" class="w-full bg-gray-900 p-2 rounded mb-2 border border-gray-600 focus:border-green-500 outline-none" oninput="this.value = this.value.toLowerCase().replace(/[^a-z0-9]/g, '')">
             <input id="r-pass" type="password" placeholder="Password" class="w-full bg-gray-900 p-2 rounded mb-4 border border-gray-600 focus:border-green-500 outline-none">
             
             <div class="flex gap-2 mb-3">
@@ -993,15 +993,27 @@ async function driveUpload(files) {
         }
 
         async function doRegister() {
-            const f = document.getElementById('r-fullname').value.trim(); // Full Name အသစ်
+            const f = document.getElementById('r-fullname').value.trim();
             const u = document.getElementById('r-user').value.trim();
             const p = document.getElementById('r-pass').value.trim();
             
             // အလွတ်ဖြစ်နေရင် တားမယ်
             if(!f || !u || !p) { showToast('Please fill all fields', 'error'); return; }
 
+            // --- အသစ်ထည့်ထားသော Validation စည်းမျဉ်းများ ---
+            const usernameRegex = /^[a-z0-9]+$/;
+            if (!usernameRegex.test(u)) {
+                showToast('Username can only contain lowercase letters and numbers', 'error');
+                return;
+            }
+            if (p.length < 6) {
+                showToast('Password must be at least 6 characters long', 'error');
+                return;
+            }
+            // ------------------------------------------
+
             const params = new URLSearchParams(); 
-            params.append('full_name', f); // Backend ကို Full Name ပါ ပို့မယ်
+            params.append('full_name', f);
             params.append('username', u); 
             params.append('password', p);
             
@@ -1015,7 +1027,6 @@ async function driveUpload(files) {
                 if(res.ok) { 
                     showToast('Registration Success! Please Login.'); 
                     toggleModal('register-modal'); 
-                    // Input တွေကို ပြန်ရှင်းပေးမည်
                     document.getElementById('r-fullname').value = '';
                     document.getElementById('r-user').value = '';
                     document.getElementById('r-pass').value = '';
