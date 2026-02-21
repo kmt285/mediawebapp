@@ -917,12 +917,21 @@ async function pasteItem() {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/upload', true);
 
-                // --- % တွက်ချက်ပြီး UI ပြောင်းလဲမည့်အပိုင်း အသစ် ---
+                // --- % တွက်ချက်ပြီး UI ပြောင်းလဲမည့်အပိုင်း ---
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
                         const p = Math.round((e.loaded / e.total) * 100);
                         document.getElementById('upload-progress-bar').style.width = p + "%";
-                        document.getElementById('upload-percentage').innerText = p + "%";
+                        
+                        const pctText = document.getElementById('upload-percentage');
+                        if (p === 100) {
+                            // 100% ပြည့်သွားရင် Telegram သို့ ဆက်တင်နေကြောင်း ပြမည်
+                            pctText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing...';
+                            pctText.className = "text-[10px] font-bold text-yellow-400 w-16 text-right";
+                        } else {
+                            pctText.innerText = p + "%";
+                            pctText.className = "text-xs font-bold text-blue-400 w-8 text-right";
+                        }
                     }
                 };
 
