@@ -196,16 +196,25 @@ async def home(request: Request):
 # Auth
 @app.post("/register")
 async def register(full_name: str = Form(...), username: str = Form(...), password: str = Form(...)):
+    
+    # --- Backend Validation အသစ် ---
+    if not username.isalnum() or not username.islower():
+        return JSONResponse(status_code=400, content={"error": "Username must contain only lowercase letters and numbers"})
+        
+    if len(password) < 6:
+        return JSONResponse(status_code=400, content={"error": "Password must be at least 6 characters long"})
+    # ------------------------------
+    
     # Username တူနေတာ ရှိမရှိ စစ်မည်
     if await users_collection.find_one({"username": username}):
         return JSONResponse(status_code=400, content={"error": "Username already taken"})
     
-    # Database ထဲသို့ Full Name ပါ ထည့်သိမ်းမည်
+    # Database ထဲသို့ ထည့်သိမ်းမည်
     await users_collection.insert_one({
         "full_name": full_name,
         "username": username, 
         "password": get_password_hash(password),
-        "created_at": time.time() # Account ဖွင့်တဲ့ အချိန်ပါ မှတ်ထားပေးလိုက်ပါတယ်
+        "created_at": time.time()
     })
     return {"message": "Success"}
 
