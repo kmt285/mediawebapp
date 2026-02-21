@@ -90,11 +90,13 @@
                         <button onclick="cancelPaste()" id="cancel-paste-btn" class="hidden bg-gray-700 hover:bg-gray-600 text-gray-300 px-3 py-2 rounded ml-2 transition" title="Cancel Move">
                             <i class="fas fa-times"></i>
                         </button>
-                        <button onclick="createFolder()" class="bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded flex items-center gap-2 transition">
-                            <i class="fas fa-folder-plus text-yellow-400"></i> <span class="hidden sm:inline">New Folder</span>
+                        
+                        <button onclick="createFolder()" class="hidden md:flex bg-gray-700 hover:bg-gray-600 border border-gray-500 text-white px-3 py-2 rounded items-center gap-2 transition">
+                            <i class="fas fa-folder-plus text-yellow-400"></i> <span>New Folder</span>
                         </button>
-                        <label class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer flex items-center gap-2 shadow transition">
-                            <i class="fas fa-cloud-upload-alt"></i> <span class="hidden sm:inline">Upload</span>
+                        
+                        <label class="hidden md:flex bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded cursor-pointer items-center gap-2 shadow transition">
+                            <i class="fas fa-cloud-upload-alt"></i> <span>Upload</span>
                             <input type="file" id="drive-file" class="hidden" multiple onchange="driveUpload(this.files)">
                         </label>
                     </div>
