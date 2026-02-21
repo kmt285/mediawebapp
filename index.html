@@ -965,8 +965,13 @@ async function pasteItem() {
                 
                 try {
                     const isSuccess = await uploadSingleFile(files[i]); 
-                    if (isSuccess) successCount++;
-                    else failCount++;
+                    if (isSuccess) {
+                        successCount++;
+                        // --- ပြင်ဆင်ချက်: ဖိုင်တစ်ခု တင်ပြီးတာနဲ့ 100% ပြည့်ရင် ချက်ချင်း UI ကို Refresh လုပ်မည် ---
+                        loadDriveContent(); 
+                    } else {
+                        failCount++;
+                    }
                 } catch (err) {
                     console.error(err);
                     failCount++;
@@ -983,6 +988,7 @@ async function pasteItem() {
             document.getElementById('drive-file').value = ''; 
             
             if (successCount > 0) {
+                // အားလုံးပြီးသွားရင် နောက်ဆုံးအကြိမ် ထပ်ပြီး Refresh လုပ်ပေးမည်
                 showToast(`Upload Complete: ${successCount} success, ${failCount} failed`, 'success');
                 loadDriveContent(); 
             } else {
