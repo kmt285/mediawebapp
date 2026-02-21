@@ -33,7 +33,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "supersecret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 MAX_FILE_SIZE = 1100 * 1024 * 1024
-mongo_client = AsyncIOMotorClient(MONGO_URL, maxPoolSize=1100) 
+mongo_client = AsyncIOMotorClient(MONGO_URL, maxPoolSize=50) 
 db = mongo_client["fileshare_db"]
 
 # --- Setup ---
@@ -55,7 +55,6 @@ oauth.register(
 )
 
 # Database
-mongo_client = AsyncIOMotorClient(MONGO_URL)
 db = mongo_client["fileshare_db"]
 files_collection = db["files"]
 folders_collection = db["folders"]
