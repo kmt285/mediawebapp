@@ -326,8 +326,10 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
         if getattr(msg, "document", None) and getattr(msg.document, "thumbs", None):
             thumb_id = msg.document.thumbs[0].file_id
 
+        # Thumbnail ယူခြင်း ပြီးသွားတဲ့ နေရာအောက်တွင် ...
         file_data = {
             "uid": file_uid,
+            "message_id": msg.id,         # <--- 🌟 🌟 ဒီစာကြောင်း အသစ်တိုးလိုက်ပါ 🌟 🌟
             "file_id": msg.document.file_id,
             "filename": file.filename,
             "size": getattr(msg.document, "file_size", file.size),
@@ -547,7 +549,13 @@ async def download_file(uid: str, pwd: Optional[str] = None):
     
     async def streamer():
         try:
-            async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
+            target_chat = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
+            # --- FIX: Message ID ကနေတစ်ဆင့် လုံခြုံစွာ Stream လုပ်မည် ---
+            if "message_id" in file_data:
+                message = await bot.get_messages(chat_id=target_chat, message_ids=file_data["message_id"])
+                async for chunk in bot.stream_media(message): yield chunk
+            else:
+                async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
         except Exception as e:
             print(f"Download Error: {e}")
             
@@ -568,10 +576,11 @@ async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
 
     filename = file_data["filename"]
     file_size = file_data.get("size", 0)
-    file_id = file_data["file_id"]
     
     mime_type, _ = mimetypes.guess_type(filename)
     if not mime_type: mime_type = "application/octet-stream"
+    
+    target_chat = int(CHANNEL_ID_STR) if CHANNEL_ID_STR.startswith("-100") else CHANNEL_ID_STR
     
     # --- Range Request Logic for Video Playback ---
     range_header = request.headers.get("Range")
@@ -593,7 +602,13 @@ async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
             bytes_to_send = length
             
             try:
-                async for chunk in bot.stream_media(file_id, offset=offset_chunks, limit=limit_chunks):
+                # --- FIX: Message ID ကနေတစ်ဆင့် လုံခြုံစွာ Stream လုပ်မည် ---
+                if "message_id" in file_data:
+                    media_source = await bot.get_messages(chat_id=target_chat, message_ids=file_data["message_id"])
+                else:
+                    media_source = file_data["file_id"]
+                    
+                async for chunk in bot.stream_media(media_source, offset=offset_chunks, limit=limit_chunks):
                     if not chunk: break
                     if first_chunk_offset > 0:
                         chunk = chunk[first_chunk_offset:]
@@ -618,7 +633,12 @@ async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
     else:
         async def streamer():
             try:
-                async for chunk in bot.stream_media(file_id): yield chunk
+                # --- FIX: Message ID ကနေတစ်ဆင့် လုံခြုံစွာ Stream လုပ်မည် ---
+                if "message_id" in file_data:
+                    message = await bot.get_messages(chat_id=target_chat, message_ids=file_data["message_id"])
+                    async for chunk in bot.stream_media(message): yield chunk
+                else:
+                    async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
             except Exception as e:
                 print(f"Streaming Error: {e}")
                 
