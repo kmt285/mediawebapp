@@ -308,10 +308,10 @@ async def upload_file(file: UploadFile = File(...), token: Optional[str] = Form(
     temp_file_path = f"temp_{file_uid}_{file.filename}"
     
     try:
-        # ၁။ File ကို Local Disk ပေါ် အရင်ရေးမည် (Pyrogram မှ Error မတက်စေရန် အသေချာဆုံးနည်း)
-        import shutil
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # ၁။ File ကို Local Disk ပေါ်သို့ Async စနစ်ဖြင့် ရေးမည် (Server လေးလံမှု မရှိစေရန်)
+        async with aiofiles.open(temp_file_path, 'wb') as out_file:
+            while content := await file.read(1024 * 1024):  # 1MB per chunk
+                await out_file.write(content)
         
         # ၂။ Telegram ဆီသို့ ပို့မည် (File Path အတိအကျကို သုံးလိုက်ပါသည်)
         msg = await bot.send_document(
