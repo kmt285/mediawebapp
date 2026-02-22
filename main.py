@@ -4,6 +4,7 @@ import math
 import uuid
 import uvicorn
 import aiofiles
+import shutil
 import mimetypes
 import urllib.parse
 from typing import Optional, List
@@ -374,11 +375,14 @@ async def upload_file(
     temp_file_path = f"temp_{file_uid}_{file.filename}"
     
     try:
-        # ၁။ Local Disk သို့ အရင်ရေးမည် (UI တွင် အမြန်ဆုံး ပြီးမြောက်ရန်)
-        async with aiofiles.open(temp_file_path, 'wb') as out_file:
-            while content := await file.read(1024 * 1024):
-                await out_file.write(content)
-        
+        # ၁။ Local Disk သို့ အရင်ရေးမည် (OS-Level Copy ဖြင့် အမြန်ဆုံး ကူးမည်)
+        if hasattr(file.file, 'name'):
+            shutil.copyfile(file.file.name, temp_file_path)
+        else:
+            async with aiofiles.open(temp_file_path, 'wb') as out_file:
+                while content := await file.read(1024 * 1024):
+                    await out_file.write(content)
+                    
         actual_size = os.path.getsize(temp_file_path)
         
         # ၂။ Database သို့ Processing အနေဖြင့် ယာယီသိမ်းမည်
