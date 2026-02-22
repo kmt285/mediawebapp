@@ -451,7 +451,8 @@ async def get_content(folder_id: Optional[str] = "root", q: Optional[str] = None
             "type": "file",
             "date": time.strftime('%Y-%m-%d', time.localtime(f['upload_date'])),
             "has_thumb": bool(f.get("thumb_id")),
-            "has_password": bool(f.get("share_password")) # ဒီစာကြောင်း အသစ်တိုးလာတာပါ
+            "has_password": bool(f.get("share_password")),
+            "is_processing": f.get("sync_status") == "processing"  # <--- ဒီစာကြောင်း အသစ်တိုးပါမည်
         })
     return {"folders": folders, "files": files}
     
