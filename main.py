@@ -130,8 +130,15 @@ async def get_user_storage_usage(username: str) -> int:
         {"$match": {"owner": username}},
         {"$group": {"_id": None, "total_size": {"$sum": "$size"}}}
     ]
-    result = await files_collection.aggregate(pipeline).to_list(1)
-    return result[0]["total_size"] if result else 0
+    try:
+        result = await files_collection.aggregate(pipeline).to_list(1)
+        # တွက်ချက်မှု ရလဒ်သည် None ဖြစ်နေပါက 0 ဟု သတ်မှတ်မည်
+        if result and result[0].get("total_size"):
+            return int(result[0]["total_size"])
+        return 0
+    except Exception as e:
+        print(f"Aggregation Error: {e}")
+        return 0
 
 # --- Helper Functions ---
 # main.py ထဲက delete_recursive function ကို ဒီလိုအစားထိုးပါ
@@ -350,12 +357,17 @@ async def upload_file(
 
     # --- STORAGE LIMIT CHECK ---
     if user:
-        used_bytes = await get_user_storage_usage(user["username"])
-        # Database တွင် User အတွက် storage_limit သတ်မှတ်ထားခြင်း ရှိမရှိစစ်မည်၊ မရှိပါက Default (15GB) ကိုသုံးမည်
-        limit_bytes = user.get("storage_limit", DEFAULT_STORAGE_LIMIT) 
-        
-        if used_bytes + file.size > limit_bytes:
-            return JSONResponse(status_code=413, content={"error": "Storage Limit Exceeded! Not enough space."})
+        try:
+            used_bytes = await get_user_storage_usage(user["username"])
+            limit_bytes = user.get("storage_limit", DEFAULT_STORAGE_LIMIT) 
+            
+            # file.size သည် တချို့အခြေအနေတွင် None ဖြစ်နေတတ်သဖြင့် (file.size or 0) ဟု ပြင်ရေးရပါမည်
+            incoming_size = file.size or 0 
+            
+            if used_bytes + incoming_size > limit_bytes:
+                return JSONResponse(status_code=413, content={"error": f"Storage Limit Exceeded! You have {limit_bytes/1024/1024/1024:.1f}GB limit."})
+        except Exception as e:
+            print(f"Storage check error: {e}")
     # ---------------------------
         
     temp_file_path = f"temp_{file_uid}_{file.filename}"
