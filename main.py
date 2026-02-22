@@ -623,12 +623,12 @@ async def download_file(uid: str, pwd: Optional[str] = None):
             print(f"Download Error: {e}")
             
 # --- FIX: Unicode / မြန်မာစာ ဖိုင်နာမည်များအတွက် UTF-8 Encoding ပြောင်းခြင်း ---
-            encoded_name = urllib.parse.quote(file_data["filename"])
-            headers = {"Content-Disposition": f"attachment; filename*=utf-8''{encoded_name}"}
+    encoded_name = urllib.parse.quote(file_data["filename"])
+    headers = {"Content-Disposition": f"attachment; filename*=utf-8''{encoded_name}"}
             
-            if file_size: headers["Content-Length"] = str(file_size)
+    if file_size: headers["Content-Length"] = str(file_size)
             
-            return StreamingResponse(streamer(), media_type="application/octet-stream", headers=headers)
+    return StreamingResponse(streamer(), media_type="application/octet-stream", headers=headers)
 
 @app.get("/view/{uid}")
 async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
@@ -700,26 +700,26 @@ async def view_file(request: Request, uid: str, pwd: Optional[str] = None):
         return StreamingResponse(range_streamer(), status_code=206, headers=headers)
         
     else:
-            async def streamer():
-                try:
-                    if "message_id" in file_data:
-                        message = await bot.get_messages(chat_id=target_chat, message_ids=file_data["message_id"])
-                        async for chunk in bot.stream_media(message): yield chunk
-                    else:
-                        async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
-                except Exception as e:
-                    print(f"Streaming Error: {e}")
-            
-            # --- FIX: Unicode / မြန်မာစာ ဖိုင်နာမည်များအတွက် UTF-8 Encoding ပြောင်းခြင်း ---        
-            encoded_name = urllib.parse.quote(filename)
-            headers = {
-                "Accept-Ranges": "bytes",
-                "Content-Type": mime_type,
-                "Content-Disposition": f"inline; filename*=utf-8''{encoded_name}"
-            }
-            if file_size: headers["Content-Length"] = str(file_size)
-            
-            return StreamingResponse(streamer(), headers=headers)
+        async def streamer():
+            try:
+                if "message_id" in file_data:
+                    message = await bot.get_messages(chat_id=target_chat, message_ids=file_data["message_id"])
+                    async for chunk in bot.stream_media(message): yield chunk
+                else:
+                    async for chunk in bot.stream_media(file_data["file_id"]): yield chunk
+            except Exception as e:
+                print(f"Streaming Error: {e}")
+        
+        # --- ဒီအောက်က ၄ ကြောင်းက ရှေ့ကို ပြန်ဆုတ်ထားရပါမည် (else နဲ့ တန်းနေဖို့ မလိုပါ၊ streamer နဲ့ တစ်တန်းတည်း ဖြစ်ရပါမည်) ---        
+        encoded_name = urllib.parse.quote(filename)
+        headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Type": mime_type,
+            "Content-Disposition": f"inline; filename*=utf-8''{encoded_name}"
+        }
+        if file_size: headers["Content-Length"] = str(file_size)
+        
+        return StreamingResponse(streamer(), headers=headers)
 
 @app.get("/thumb/{uid}")
 async def get_thumbnail(uid: str):
