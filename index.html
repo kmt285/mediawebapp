@@ -939,7 +939,6 @@ async function pasteItem() {
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', '/upload', true);
 
-                // --- 100% ပြည့်သည်နှင့် Syncing စာသားမပြဘဲ Box ချက်ချင်းဖျောက်မည့်အပိုင်း ---
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
                         const p = Math.round((e.loaded / e.total) * 100);
@@ -948,13 +947,7 @@ async function pasteItem() {
                         const pctText = document.getElementById('upload-percentage');
                         pctText.innerText = p + "%";
                         pctText.className = "text-xs font-bold text-blue-400 w-8 text-right";
-                        
-                        // 100% ပြည့်တာနဲ့ Box ကို အောက်ချပြီး ဖျောက်လိုက်ပါမည်
-                        if (p === 100) {
-                            const uploadToast = document.getElementById('upload-toast');
-                            uploadToast.classList.add('translate-y-10', 'opacity-0');
-                            setTimeout(() => uploadToast.classList.add('hidden'), 300);
-                        }
+                        // မှတ်ချက်: Box ကို ဒီနေရာမှာ ကြိုမဖျောက်တော့ပါ။ Server က လက်ခံပြီး ဖိုင်ပေါ်လာမယ့်အချိန်နဲ့ တစ်ထပ်တည်းကျအောင် အောက်တွင် ဖျောက်ပါမည်။
                     }
                 };
 
@@ -984,11 +977,11 @@ async function pasteItem() {
             let successCount = 0;
             let failCount = 0;
             
+            // Box ကို စတင်ပြသမည်
+            uploadToast.classList.remove('hidden');
+            setTimeout(() => uploadToast.classList.remove('translate-y-10', 'opacity-0'), 10);
+            
             for (let i = 0; i < files.length; i++) {
-                // --- Box ကို ဖိုင်အသစ်တင်တိုင်း ပြန်ခေါ်ပြမည့်အပိုင်း (Multi-upload အတွက်) ---
-                uploadToast.classList.remove('hidden');
-                setTimeout(() => uploadToast.classList.remove('translate-y-10', 'opacity-0'), 10);
-                
                 document.getElementById('upload-count').innerText = `${i + 1} / ${files.length}`;
                 document.getElementById('upload-filename').innerText = files[i].name;
                 
@@ -999,7 +992,8 @@ async function pasteItem() {
                     const isSuccess = await uploadSingleFile(files[i]); 
                     if (isSuccess) {
                         successCount++;
-                        loadDriveContent("", true); // 100% ပြည့်ပြီးတာနဲ့ နောက်ကွယ်ကနေ ဖိုင်ကို ချက်ချင်းပေါ်စေမည်
+                        // 100% ပြည့်ပြီး Server က လက်ခံတာနဲ့ Grid ကို အရင် Refresh လုပ်မည် (ဖိုင် ချက်ချင်းပေါ်လာမည်)
+                        await loadDriveContent("", true); 
                     } else {
                         failCount++;
                     }
@@ -1011,14 +1005,20 @@ async function pasteItem() {
 
             document.getElementById('drive-file').value = ''; 
             
+            // အားလုံးပြီးသွားရင် Box ကို အောက်ပြန်ချပြီး ဖျောက်မယ် (ဖိုင်ပေါ်လာတာနဲ့ Box ပျောက်တာ တစ်ချိန်တည်းဖြစ်သွားမည်)
+            uploadToast.classList.add('translate-y-10', 'opacity-0');
+            setTimeout(() => {
+                uploadToast.classList.add('hidden');
+                document.getElementById('upload-progress-bar').style.width = "0%";
+            }, 300);
+            
             if (successCount > 0) {
                 showToast(`Upload Complete: ${successCount} success`, 'success');
-                loadDriveContent("", true);
             } else {
                 showToast(`All uploads failed.`, 'error');
             }
         }
-
+        
         // --- NAVIGATION ---
         function enterFolder(uid, name) {
     clearSelection(); // ဒီစာကြောင်း အသစ်ထည့်ပါ
