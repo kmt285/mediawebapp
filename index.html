@@ -755,17 +755,34 @@ async function pasteItem() {
     searchTimeout = setTimeout(() => { loadDriveContent(query); }, 500);
 }
 
-        function getFileIcon(filename) {
-            const ext = filename.split('.').pop().toLowerCase();
-            if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return '<i class="fas fa-image text-purple-400 text-3xl mb-1"></i>';
-            if (['mp4', 'mkv', 'mov', 'avi'].includes(ext)) return '<i class="fas fa-video text-red-400 text-3xl mb-1"></i>';
-            if (['mp3', 'wav', 'ogg'].includes(ext)) return '<i class="fas fa-music text-pink-400 text-3xl mb-1"></i>';
-            if (['pdf'].includes(ext)) return '<i class="fas fa-file-pdf text-red-500 text-3xl mb-1"></i>';
-            if (['zip', 'rar', '7z'].includes(ext)) return '<i class="fas fa-file-archive text-yellow-500 text-3xl mb-1"></i>';
-            if (['py', 'js', 'html', 'css'].includes(ext)) return '<i class="fas fa-file-code text-green-400 text-3xl mb-1"></i>';
-            return '<i class="fas fa-file-alt text-blue-400 text-3xl mb-1"></i>';
+        // --- Thumbnail မတက်လာပါက Icon သို့ အလိုအလျောက် ပြောင်းပေးမည့်စနစ် ---
+        function handleThumbError(imgEl, filename) {
+            imgEl.outerHTML = getFileIcon(filename);
         }
 
+        // --- အလန်းစား File Icons များနှင့် Gradient နောက်ခံများ ---
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            let iconClass = "fas fa-file-alt";
+            let colorClass = "from-gray-600 to-gray-700";
+
+            if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) { iconClass = "fas fa-image"; colorClass = "from-purple-500 to-pink-500"; }
+            else if (['mp4', 'mkv', 'mov', 'avi', 'webm'].includes(ext)) { iconClass = "fas fa-file-video"; colorClass = "from-red-500 to-rose-600"; }
+            else if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) { iconClass = "fas fa-file-audio"; colorClass = "from-pink-500 to-rose-400"; }
+            else if (['pdf'].includes(ext)) { iconClass = "fas fa-file-pdf"; colorClass = "from-red-600 to-red-800"; }
+            else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) { iconClass = "fas fa-file-archive"; colorClass = "from-yellow-500 to-orange-500"; }
+            else if (['py', 'js', 'html', 'css', 'json', 'txt', 'md'].includes(ext)) { iconClass = "fas fa-file-code"; colorClass = "from-green-500 to-emerald-600"; }
+            else if (['doc', 'docx'].includes(ext)) { iconClass = "fas fa-file-word"; colorClass = "from-blue-500 to-blue-700"; }
+            else if (['xls', 'xlsx', 'csv'].includes(ext)) { iconClass = "fas fa-file-excel"; colorClass = "from-emerald-500 to-green-700"; }
+
+            return `
+                <div class="w-16 h-16 rounded-lg mb-1 shadow-lg border border-gray-600 flex flex-col items-center justify-center bg-gradient-to-br ${colorClass} pointer-events-none">
+                    <i class="${iconClass} text-white text-2xl drop-shadow-md mb-0.5"></i>
+                    <span class="text-[9px] font-bold text-white uppercase tracking-wider bg-black/40 px-1.5 py-0.5 rounded-sm shadow-inner truncate max-w-[50px]">${ext.substring(0,4)}</span>
+                </div>
+            `;
+        }
+        
         function copyLink(uid) {
             const link = window.location.origin + '/dl/' + uid;
             navigator.clipboard.writeText(link).then(() => showToast('Link Copied to Clipboard'));
@@ -841,8 +858,11 @@ async function pasteItem() {
                     const activeClass = isSelected ? 'ring-2 ring-blue-500 bg-blue-900/50' : '';
                     const checkVisible = isSelected ? 'opacity-100 text-blue-500 bg-white' : 'opacity-40 text-gray-400 bg-gray-800 hover:opacity-100';
 
+                    // ဖိုင်နာမည်များတွင် အစက်အပြောက်များပါပါက Error မတက်စေရန် ရှင်းလင်းခြင်း
+                    let safeName = f.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    
                     let displayIcon = f.has_thumb 
-                        ? `<img src="/thumb/${f.uid}" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
+                        ? `<img src="/thumb/${f.uid}" onerror="handleThumbError(this, '${safeName}')" class="w-16 h-16 object-cover rounded-lg mb-1 shadow-md border border-gray-600 pointer-events-none">` 
                         : getFileIcon(f.name);
 
                     htmlContent += `
